@@ -1,4 +1,5 @@
 import SwiftUI
+import WidgetKit
 
 extension Color {
     init(hex: String) {
@@ -26,6 +27,7 @@ struct ContentView: View {
                 }
             }
             .tabViewStyle(.page(indexDisplayMode: .automatic))
+            .ignoresSafeArea()
 
             HStack {
                 Button {
@@ -77,7 +79,7 @@ struct Card<Content: View>: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .glassEffect(.regular.tint(.white.opacity(0.10)),
+        .glassEffect(.regular.tint(Color(hex: "#0A2A5E").opacity(0.25)),
                      in: RoundedRectangle(cornerRadius: 20, style: .continuous))
     }
 }
@@ -160,19 +162,33 @@ struct WeatherPageView: View {
                 }
             }
             .refreshable { await load() }
+
+            topScrim
         }
         .task(id: city.id) { await load() }
     }
 
-    private var backgroundGradient: LinearGradient {
-        let pair: (top: String, bottom: String)
+    private var gradientPair: (top: String, bottom: String) {
         if let c = forecast?.current {
-            pair = WeatherCode.gradient(c.weather_code, isDay: c.is_day == 1)
-        } else {
-            pair = ("#3D7BDB", "#7FB2F0")
+            return WeatherCode.gradient(c.weather_code, isDay: c.is_day == 1)
         }
-        return LinearGradient(colors: [Color(hex: pair.top), Color(hex: pair.bottom)],
-                              startPoint: .top, endPoint: .bottom)
+        return ("#3D7BDB", "#7FB2F0")
+    }
+
+    private var backgroundGradient: LinearGradient {
+        LinearGradient(colors: [Color(hex: gradientPair.top), Color(hex: gradientPair.bottom)],
+                       startPoint: .top, endPoint: .bottom)
+    }
+
+    /// 顶部渐隐罩：内容滚到状态栏/按钮下方时不糊字
+    private var topScrim: some View {
+        LinearGradient(colors: [Color(hex: gradientPair.top).opacity(0.92),
+                                Color(hex: gradientPair.top).opacity(0)],
+                       startPoint: .top, endPoint: .bottom)
+            .frame(height: 120)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .ignoresSafeArea(edges: .top)
+            .allowsHitTesting(false)
     }
 
     private var header: some View {
@@ -411,7 +427,7 @@ struct WeatherPageView: View {
         let lo = (d.temperature_2m_min.min() ?? 0) - 1.5
         let hi = (d.temperature_2m_max.max() ?? 1) + 1.5
         return values.enumerated().map { i, v in
-            let x = n > 1 ? width * CGFloat(i) / CGFloat(n - 1) : width / 2
+            let x = n > 1 ? 8 + (width - 16) * CGFloat(i) / CGFloat(n - 1) : width / 2
             let frac = hi > lo ? (v - lo) / (hi - lo) : 0.5
             return CGPoint(x: x, y: height - 16 - CGFloat(frac) * (height - 32))
         }
@@ -472,7 +488,7 @@ struct WeatherPageView: View {
                 GeometryReader { geo in
                     let w = geo.size.width
                     let horizon: CGFloat = 78
-                    let r = w / 2 - 26
+                    let r = min(w / 2 - 26, 66)
                     let cx = w / 2
                     let frac = sunFraction(f)
                     let theta = Double.pi * (1 - min(max(frac, 0), 1))
@@ -507,6 +523,7 @@ struct WeatherPageView: View {
                     }
                 }
                 .frame(height: 88)
+                .clipped()
                 HStack {
                     Label("日出 \(hhmm(rise))", systemImage: "sunrise.fill")
                     Spacer()
@@ -666,8 +683,11 @@ struct WeatherPageView: View {
 
     private func load() async {
         do {
-            forecast = try await WeatherService.fetchForecast(for: city)
+            let f = try await WeatherService.fetchForecast(for: city)
+            forecast = f
             errorText = nil
+            SharedSnapshotStore.save(SharedSnapshot.make(from: f, city: city))
+            WidgetCenter.shared.reloadAllTimelines()
         } catch {
             if forecast == nil {
                 let desc = (error as NSError).localizedDescription

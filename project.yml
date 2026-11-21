@@ -14,13 +14,53 @@ targets:
       properties:
         CFBundleDisplayName: 几何天气
         NSLocationWhenInUseUsageDescription: 用于显示你所在位置的天气
+        UIStatusBarStyle: UIStatusBarStyleLightContent
+        UIViewControllerBasedStatusBarAppearance: false
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
+    entitlements:
+      path: GeoWeather/GeoWeather.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.zhedashutingshuai.geoweather
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.zhedashutingshuai.geoweather
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "1"
+    dependencies:
+      - target: GeoWeatherWidget
+  GeoWeatherWidget:
+    type: app-extension
+    platform: iOS
+    sources:
+      - GeoWeatherWidget
+      - path: GeoWeather/Models.swift
+      - path: GeoWeather/WeatherService.swift
+      - path: GeoWeather/WeatherCode.swift
+      - path: GeoWeather/SharedSnapshot.swift
+      - path: GeoWeather/IconData.swift
+      - path: GeoWeather/IconData1.swift
+      - path: GeoWeather/IconData2.swift
+      - path: GeoWeather/IconData3.swift
+    info:
+      path: GeoWeatherWidget/Info.plist
+      properties:
+        CFBundleDisplayName: 几何天气
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    entitlements:
+      path: GeoWeatherWidget/GeoWeatherWidget.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.zhedashutingshuai.geoweather
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.zhedashutingshuai.geoweather.widget
         MARKETING_VERSION: "1.0"
         CURRENT_PROJECT_VERSION: "1"
         SWIFT_VERSION: "5.0"
