@@ -270,7 +270,8 @@ struct WeatherPageView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 VStack(spacing: 2) {
                     HStack(spacing: 0) {
-                        ForEach(Array(items.enumerated()), id: \.offset) { idx, item in
+                        ForEach(items.indices, id: \.self) { idx in
+                            let item = items[idx]
                             VStack(spacing: 6) {
                                 Text(idx == 0 ? "现在" : item.hour)
                                     .font(.caption)
@@ -320,7 +321,8 @@ struct WeatherPageView: View {
                 }
             }
             .stroke(Color(hex: "#FFD37F"), style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
-            ForEach(Array(points.enumerated()), id: \.offset) { _, p in
+            ForEach(points.indices, id: \.self) { pi in
+                let p = points[pi]
                 Circle()
                     .fill(Color(hex: "#FFD37F"))
                     .frame(width: 5, height: 5)
@@ -339,7 +341,8 @@ struct WeatherPageView: View {
             dailyTrend(d)
             Divider().overlay(.white.opacity(0.25))
             VStack(spacing: 10) {
-                ForEach(Array(d.time.enumerated()), id: \.offset) { i, dateStr in
+                ForEach(d.time.indices, id: \.self) { i in
+                    let dateStr = d.time[i]
                     HStack(spacing: 8) {
                         Text(weekdayText(dateStr, timezone: f.timezone, index: i))
                             .font(.subheadline)
@@ -386,14 +389,16 @@ struct WeatherPageView: View {
                     .stroke(Color(hex: "#FFB35C"), style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
                 smoothLine(minPts)
                     .stroke(Color(hex: "#7FD4FF"), style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
-                ForEach(Array(maxPts.enumerated()), id: \.offset) { i, p in
+                ForEach(maxPts.indices, id: \.self) { i in
+                    let p = maxPts[i]
                     Circle().fill(Color(hex: "#FFB35C")).frame(width: 4, height: 4).position(p)
                     Text("\(Int(d.temperature_2m_max[i].rounded()))°")
                         .font(.caption2)
                         .foregroundStyle(Color(hex: "#FFD9A8"))
                         .position(x: p.x, y: max(p.y - 10, 6))
                 }
-                ForEach(Array(minPts.enumerated()), id: \.offset) { i, p in
+                ForEach(minPts.indices, id: \.self) { i in
+                    let p = minPts[i]
                     Circle().fill(Color(hex: "#7FD4FF")).frame(width: 4, height: 4).position(p)
                     Text("\(Int(d.temperature_2m_min[i].rounded()))°")
                         .font(.caption2)
@@ -612,7 +617,8 @@ struct WeatherPageView: View {
         ]
         return Card(title: "生活指数") {
             HStack(alignment: .top) {
-                ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                ForEach(items.indices, id: \.self) { ii in
+                    let item = items[ii]
                     VStack(spacing: 5) {
                         Image(systemName: item.2)
                             .symbolRenderingMode(.multicolor)
