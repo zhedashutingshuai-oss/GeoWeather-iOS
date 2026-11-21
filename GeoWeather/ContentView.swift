@@ -372,42 +372,49 @@ struct WeatherPageView: View {
     /// 15 日高低温趋势双曲线（原版逐日卡的标志性样式：高点在上、低点在下，各带数值）
     private func dailyTrend(_ d: DailyWeather) -> some View {
         GeometryReader { geo in
-            let w = geo.size.width
-            let h: CGFloat = 78
-            let n = d.time.count
-            let lo = (d.temperature_2m_min.min() ?? 0) - 1.5
-            let hi = (d.temperature_2m_max.max() ?? 1) + 1.5
-            func pt(_ v: Double, _ i: Int) -> CGPoint {
-                let x = n > 1 ? w * CGFloat(i) / CGFloat(n - 1) : w / 2
-                let frac = hi > lo ? (v - lo) / (hi - lo) : 0.5
-                return CGPoint(x: x, y: h - 16 - CGFloat(frac) * (h - 32))
-            }
-            let maxPts = d.temperature_2m_max.enumerated().map { pt($0.element, $0.offset) }
-            let minPts = d.temperature_2m_min.enumerated().map { pt($0.element, $0.offset) }
-            ZStack {
-                smoothLine(maxPts)
-                    .stroke(Color(hex: "#FFB35C"), style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
-                smoothLine(minPts)
-                    .stroke(Color(hex: "#7FD4FF"), style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
-                ForEach(maxPts.indices, id: \.self) { i in
-                    let p = maxPts[i]
-                    Circle().fill(Color(hex: "#FFB35C")).frame(width: 4, height: 4).position(p)
-                    Text("\(Int(d.temperature_2m_max[i].rounded()))°")
-                        .font(.caption2)
-                        .foregroundStyle(Color(hex: "#FFD9A8"))
-                        .position(x: p.x, y: max(p.y - 10, 6))
-                }
-                ForEach(minPts.indices, id: \.self) { i in
-                    let p = minPts[i]
-                    Circle().fill(Color(hex: "#7FD4FF")).frame(width: 4, height: 4).position(p)
-                    Text("\(Int(d.temperature_2m_min[i].rounded()))°")
-                        .font(.caption2)
-                        .foregroundStyle(Color(hex: "#CDEFFF"))
-                        .position(x: p.x, y: min(p.y + 10, h - 6))
-                }
-            }
+            dailyTrendCanvas(d, width: geo.size.width)
         }
         .frame(height: 78)
+    }
+
+    private func dailyTrendCanvas(_ d: DailyWeather, width: CGFloat) -> some View {
+        let h: CGFloat = 78
+        let maxPts = trendPoints(d.temperature_2m_max, in: d, width: width, height: h)
+        let minPts = trendPoints(d.temperature_2m_min, in: d, width: width, height: h)
+        return ZStack {
+            smoothLine(maxPts)
+                .stroke(Color(hex: "#FFB35C"), style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+            smoothLine(minPts)
+                .stroke(Color(hex: "#7FD4FF"), style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+            ForEach(maxPts.indices, id: \.self) { i in
+                let p = maxPts[i]
+                Circle().fill(Color(hex: "#FFB35C")).frame(width: 4, height: 4).position(p)
+                Text("\(Int(d.temperature_2m_max[i].rounded()))°")
+                    .font(.caption2)
+                    .foregroundStyle(Color(hex: "#FFD9A8"))
+                    .position(x: p.x, y: max(p.y - 10, 6))
+            }
+            ForEach(minPts.indices, id: \.self) { i in
+                let p = minPts[i]
+                Circle().fill(Color(hex: "#7FD4FF")).frame(width: 4, height: 4).position(p)
+                Text("\(Int(d.temperature_2m_min[i].rounded()))°")
+                    .font(.caption2)
+                    .foregroundStyle(Color(hex: "#CDEFFF"))
+                    .position(x: p.x, y: min(p.y + 10, h - 6))
+            }
+        }
+    }
+
+    /// 把温度序列映射成图上的点（纯计算，放在 ViewBuilder 之外，避免编译器类型推断卡死）
+    private func trendPoints(_ values: [Double], in d: DailyWeather, width: CGFloat, height: CGFloat) -> [CGPoint] {
+        let n = values.count
+        let lo = (d.temperature_2m_min.min() ?? 0) - 1.5
+        let hi = (d.temperature_2m_max.max() ?? 1) + 1.5
+        return values.enumerated().map { i, v in
+            let x = n > 1 ? width * CGFloat(i) / CGFloat(n - 1) : width / 2
+            let frac = hi > lo ? (v - lo) / (hi - lo) : 0.5
+            return CGPoint(x: x, y: height - 16 - CGFloat(frac) * (height - 32))
+        }
     }
 
     /// 平滑曲线路径（中点二次贝塞尔）
