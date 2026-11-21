@@ -265,6 +265,8 @@ struct WeatherPageView: View {
     @Environment(\.colorScheme) private var colorScheme
     @State private var hourMetric = 0
     @Namespace private var metricNS
+    @State private var radarFrames: [RadarFrame] = []
+    @State private var showRadar = false
 
     private var nightMode: Bool {
         AppearanceHelper.isNight(mode: appearanceMode, scheme: colorScheme)
@@ -287,6 +289,7 @@ struct WeatherPageView: View {
                         if let m = f.minutely_15, !m.precipitation.isEmpty {
                             precipCard(f, m)
                         }
+                        radarCard
                         dailyCard(f)
                         hourlyCard(f)
                         if let a = air {
@@ -320,6 +323,14 @@ struct WeatherPageView: View {
             topScrim
         }
         .task(id: city.id) { await load() }
+        .task {
+            if radarFrames.isEmpty {
+                radarFrames = (try? await RadarService.fetchFrames()) ?? []
+            }
+        }
+        .fullScreenCover(isPresented: $showRadar) {
+            RadarFullView(frames: radarFrames)
+        }
         .task(id: errorText) {
             guard errorText != nil else { return }
             while !Task.isCancelled && forecast == nil {
@@ -841,6 +852,32 @@ struct WeatherPageView: View {
     }
 
     // MARK: - 降水预报（逐 15 分钟）
+
+    /// 实时雨云卡：中央气象台全国雷达拼图最新一帧，点开看大图与动画
+    private var radarCard: some View {
+        Card(title: "实时雨云 · 全国雷达") {
+            VStack(alignment: .leading, spacing: 8) {
+                if let last = radarFrames.last {
+                    RadarImageView(url: last.url)
+                        .aspectRatio(825.0 / 739.0, contentMode: .fit)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                    HStack {
+                        Text("最新一帧 \(RadarTime.label(last.time))")
+                        Spacer()
+                        Text("点开看动画 ›")
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.85))
+                } else {
+                    Text("雷达图加载中…")
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.85))
+                }
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture { if !radarFrames.isEmpty { showRadar = true } }
+    }
 
     private func precipCard(_ f: ForecastResponse, _ m: MinutelyWeather) -> some View {
         let start = m.time.firstIndex(where: { $0 >= f.current.time }) ?? max(0, m.time.count - 8)
