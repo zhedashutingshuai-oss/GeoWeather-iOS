@@ -12,7 +12,83 @@ extension Color {
     }
 }
 
+enum AppSection: CaseIterable {
+    case weather, wallpaper, tools, about
+
+    var label: String {
+        switch self {
+        case .weather: return "天气"
+        case .wallpaper: return "壁纸"
+        case .tools: return "工具"
+        case .about: return "关于"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .weather: return "cloud.sun.fill"
+        case .wallpaper: return "photo.fill"
+        case .tools: return "safari.fill"
+        case .about: return "info.circle.fill"
+        }
+    }
+}
+
+/// 底部悬浮玻璃 Dock 栏（仿高刷悬浮窗的胶囊 Dock）
+struct DockBar: View {
+    @Binding var section: AppSection
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(AppSection.allCases, id: \.self) { item in
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) { section = item }
+                } label: {
+                    VStack(spacing: 2) {
+                        Image(systemName: item.icon)
+                            .font(.system(size: 19))
+                        Text(item.label)
+                            .font(.caption2.weight(.medium))
+                    }
+                    .foregroundStyle(section == item ? Color.white : Color.white.opacity(0.65))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+                    .background {
+                        if section == item {
+                            Capsule().fill(Color.white.opacity(0.28))
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(5)
+        .glassEffect(.regular.tint(Color(hex: "#0A2A5E").opacity(0.30)), in: Capsule())
+        .shadow(color: .black.opacity(0.25), radius: 12, y: 4)
+    }
+}
+
 struct ContentView: View {
+    @State private var section: AppSection = .weather
+
+    var body: some View {
+        ZStack(alignment: .bottom) {
+            Group {
+                switch section {
+                case .weather: WeatherHomeView()
+                case .wallpaper: WallpaperView()
+                case .tools: ToolsView()
+                case .about: AboutView()
+                }
+            }
+            DockBar(section: $section)
+                .padding(.horizontal, 30)
+                .padding(.bottom, 10)
+        }
+    }
+}
+
+struct WeatherHomeView: View {
     @EnvironmentObject var store: WeatherStore
     @EnvironmentObject var locationManager: LocationManager
     @State private var showCities = false
@@ -26,7 +102,7 @@ struct ContentView: View {
                         .tag(city.id)
                 }
             }
-            .tabViewStyle(.page(indexDisplayMode: .automatic))
+            .tabViewStyle(.page(indexDisplayMode: .never))
             .ignoresSafeArea()
 
             HStack {
@@ -85,6 +161,57 @@ struct Card<Content: View>: View {
 }
 
 /// 原版几何天气图标：静态图，或帧动画（大图标用）
+private struct Diamond: Shape {
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        p.move(to: CGPoint(x: rect.midX, y: rect.minY))
+        p.addLine(to: CGPoint(x: rect.maxX, y: rect.midY))
+        p.addLine(to: CGPoint(x: rect.midX, y: rect.maxY))
+        p.addLine(to: CGPoint(x: rect.minX, y: rect.midY))
+        p.closeSubpath()
+        return p
+    }
+}
+
+/// 程序绘制的太阳：原版晴天图标只有 3 帧，帧动画再溶接也有天花板；
+/// 这里用矢量菱形光芒＋圆盘，旋转与呼吸都是连续动画，按屏幕刷新率渲染（120Hz 屏即满帧）。
+struct SunIcon: View {
+    var size: CGFloat
+    @State private var spinning = false
+    @State private var pulsing = false
+
+    var body: some View {
+        ZStack {
+            ZStack {
+                ForEach(0..<8, id: \.self) { i in
+                    Diamond()
+                        .fill(LinearGradient(colors: [Color(hex: "#FFB84D"), Color(hex: "#FF9435")],
+                                             startPoint: .top, endPoint: .bottom))
+                        .frame(width: size * 0.30, height: size * 0.38)
+                        .offset(y: -size * 0.30)
+                        .rotationEffect(.degrees(Double(i) * 45))
+                }
+            }
+            .rotationEffect(.degrees(spinning ? 360 : 0))
+            .scaleEffect(pulsing ? 1.05 : 0.95)
+
+            Circle()
+                .fill(RadialGradient(colors: [Color(hex: "#FFE9A8"), Color(hex: "#FFD35C")],
+                                     center: .center, startRadius: 0, endRadius: size * 0.31))
+                .frame(width: size * 0.62, height: size * 0.62)
+        }
+        .frame(width: size, height: size)
+        .onAppear {
+            withAnimation(.linear(duration: 40).repeatForever(autoreverses: false)) {
+                spinning = true
+            }
+            withAnimation(.easeInOut(duration: 2.4).repeatForever(autoreverses: true)) {
+                pulsing = true
+            }
+        }
+    }
+}
+
 struct WeatherIcon: View {
     let code: Int
     let isDay: Bool
@@ -108,7 +235,10 @@ struct WeatherIcon: View {
     }
 
     var body: some View {
-        if animated {
+        if animated && code == 0 && isDay {
+            // 晴天太阳走程序绘制的连续动画，不用 3 帧 PNG
+            SunIcon(size: size)
+        } else if animated {
             let frames = WeatherCode.iconFrames(code, isDay: isDay)
             if frames.count > 1 {
                 // 帧间交叉淡入淡出代替硬切：原版每种天气只有 3~4 帧，硬切像幻灯片，溶接后顺滑得多
@@ -176,7 +306,7 @@ struct WeatherPageView: View {
                 .foregroundStyle(.white)
                 .padding(.horizontal, 16)
                 .padding(.top, 60)
-                .padding(.bottom, 30)
+                .padding(.bottom, 110)
                 }
             }
             .refreshable { await load() }
