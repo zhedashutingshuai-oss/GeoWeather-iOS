@@ -233,14 +233,19 @@ struct WeatherPageView: View {
                         .foregroundStyle(.white.opacity(0.85))
                 }
                 Spacer()
-                if let hi = f.daily.temperature_2m_max.first, let lo = f.daily.temperature_2m_min.first {
-                    VStack(alignment: .trailing, spacing: 4) {
+                VStack(alignment: .trailing, spacing: 6) {
+                    if let hi = f.daily.temperature_2m_max.first, let lo = f.daily.temperature_2m_min.first {
                         Label("\(Int(hi.rounded()))°", systemImage: "arrow.up")
                         Label("\(Int(lo.rounded()))°", systemImage: "arrow.down")
                     }
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.white.opacity(0.9))
+                    Label("\(compass(c.wind_direction_10m))风", systemImage: "safari")
+                    Label("云量 \(c.cloud_cover)%", systemImage: "cloud")
+                    if c.precipitation > 0 {
+                        Label("降水 \(String(format: "%.1f", c.precipitation)) mm", systemImage: "drop")
+                    }
                 }
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.white.opacity(0.9))
             }
             Divider().overlay(.white.opacity(0.3))
             HStack {
