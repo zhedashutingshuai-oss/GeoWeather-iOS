@@ -2,7 +2,7 @@ name: GeoWeather
 options:
   bundleIdPrefix: com.zhedashutingshuai
   deploymentTarget:
-    iOS: "17.0"
+    iOS: "26.0"
 targets:
   GeoWeather:
     type: application

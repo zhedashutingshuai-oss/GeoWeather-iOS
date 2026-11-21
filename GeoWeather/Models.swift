@@ -34,7 +34,9 @@ struct CurrentWeather: Decodable {
     let apparent_temperature: Double
     let is_day: Int
     let weather_code: Int
-    let surface_pressure_msl: Double
+    let pressure_msl: Double
+    let cloud_cover: Int
+    let precipitation: Double
     let wind_speed_10m: Double
     let wind_direction_10m: Int
     let wind_gusts_10m: Double
@@ -45,6 +47,9 @@ struct HourlyWeather: Decodable {
     let temperature_2m: [Double]
     let weather_code: [Int]
     let precipitation_probability: [Int?]?
+    let precipitation: [Double]
+    let visibility: [Double]
+    let dew_point_2m: [Double]
 }
 
 struct DailyWeather: Decodable {
@@ -56,6 +61,14 @@ struct DailyWeather: Decodable {
     let sunset: [String]
     let uv_index_max: [Double]
     let precipitation_probability_max: [Int?]?
+    let precipitation_sum: [Double]
+    let wind_speed_10m_max: [Double]
+}
+
+/// Open-Meteo 出错时返回的 JSON：{"error":true,"reason":"..."}
+struct APIErrorResponse: Decodable {
+    let error: Bool
+    let reason: String
 }
 
 struct AirQualityResponse: Decodable {

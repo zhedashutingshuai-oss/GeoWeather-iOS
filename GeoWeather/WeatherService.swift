@@ -6,13 +6,18 @@ enum WeatherService {
         comps.queryItems = [
             .init(name: "latitude", value: "\(city.latitude)"),
             .init(name: "longitude", value: "\(city.longitude)"),
-            .init(name: "current", value: "temperature_2m,relative_humidity_2m,apparent_temperature,is_day,weather_code,surface_pressure_msl,wind_speed_10m,wind_direction_10m,wind_gusts_10m"),
-            .init(name: "hourly", value: "temperature_2m,weather_code,precipitation_probability"),
-            .init(name: "daily", value: "weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,uv_index_max,precipitation_probability_max"),
+            .init(name: "current", value: "temperature_2m,relative_humidity_2m,apparent_temperature,is_day,weather_code,pressure_msl,cloud_cover,precipitation,wind_speed_10m,wind_direction_10m,wind_gusts_10m"),
+            .init(name: "hourly", value: "temperature_2m,weather_code,precipitation_probability,precipitation,visibility,dew_point_2m"),
+            .init(name: "daily", value: "weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,uv_index_max,precipitation_probability_max,precipitation_sum,wind_speed_10m_max"),
             .init(name: "timezone", value: "auto"),
             .init(name: "forecast_days", value: "15"),
         ]
         let (data, _) = try await URLSession.shared.data(from: comps.url!)
+        // 接口出错时先把官方 reason 抛出来，方便定位（截图可见）
+        if let apiErr = try? JSONDecoder().decode(APIErrorResponse.self, from: data), apiErr.error {
+            throw NSError(domain: "OpenMeteo", code: 400,
+                          userInfo: [NSLocalizedDescriptionKey: apiErr.reason])
+        }
         return try JSONDecoder().decode(ForecastResponse.self, from: data)
     }
 
