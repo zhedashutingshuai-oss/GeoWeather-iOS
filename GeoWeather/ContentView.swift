@@ -353,9 +353,9 @@ struct WeatherPageView: View {
                     EmptyView()
                 } else if c.is_day == 1 && (c.weather_code == 1 || c.weather_code == 2) {
                     // 晴间多云：只留云朵图标，太阳交给顶部场景
-                    WeatherIcon(code: 3, isDay: true, size: 76, animated: true)
+                    WeatherIcon(code: 3, isDay: true, size: 76, animated: false)
                 } else {
-                    WeatherIcon(code: c.weather_code, isDay: c.is_day == 1, size: 76, animated: true)
+                    WeatherIcon(code: c.weather_code, isDay: c.is_day == 1, size: 76, animated: false)
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     Text("\(Int(c.temperature_2m.rounded()))°")
