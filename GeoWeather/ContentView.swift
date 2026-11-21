@@ -91,6 +91,8 @@ struct WeatherIcon: View {
     var size: CGFloat = 24
     var animated: Bool = false
 
+    @State private var frameIndex = 0
+
     private func iconImage(_ name: String) -> some View {
         Group {
             if let ui = WeatherIconData.image(named: name) {
@@ -107,12 +109,26 @@ struct WeatherIcon: View {
 
     var body: some View {
         if animated {
-            TimelineView(.periodic(from: .now, by: 0.45)) { ctx in
-                let frames = WeatherCode.iconFrames(code, isDay: isDay)
-                let idx = Int(ctx.date.timeIntervalSinceReferenceDate / 0.45) % frames.count
-                iconImage(frames[idx])
+            let frames = WeatherCode.iconFrames(code, isDay: isDay)
+            if frames.count > 1 {
+                // 帧间交叉淡入淡出代替硬切：原版每种天气只有 3~4 帧，硬切像幻灯片，溶接后顺滑得多
+                ZStack {
+                    iconImage(frames[frameIndex % frames.count])
+                        .id(frameIndex % frames.count)
+                        .transition(.opacity)
+                }
+                .frame(width: size, height: size)
+                .animation(.easeInOut(duration: 0.45), value: frameIndex)
+                .task {
+                    while !Task.isCancelled {
+                        try? await Task.sleep(nanoseconds: 550_000_000)
+                        frameIndex += 1
+                    }
+                }
+            } else {
+                iconImage(frames.first ?? WeatherCode.iconName(code, isDay: isDay))
+                    .frame(width: size, height: size)
             }
-            .frame(width: size, height: size)
         } else {
             iconImage(WeatherCode.iconName(code, isDay: isDay))
                 .frame(width: size, height: size)
