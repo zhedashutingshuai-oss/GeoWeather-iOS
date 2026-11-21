@@ -101,16 +101,7 @@ enum BackupService {
         let dz = (extractVar("cityDZ", in: text) as? [String: Any])?["weatherinfo"] as? [String: Any]
         let fcRoot = extractVar("fc", in: text) as? [String: Any]
         let fArr = fcRoot?["f"] as? [[String: Any]] ?? []
-        let days: [BackupDay] = fArr.map { d in
-            BackupDay(
-                label: d["fj"] as? String ?? "",
-                dateText: d["fi"] as? String ?? "",
-                dayCode: mapCode(d["fa"] as? String ?? ""),
-                hi: Double(d["fc"] as? String ?? "") ?? 0,
-                lo: Double(d["fd"] as? String ?? "") ?? 0,
-                windText: "\((d["fe"] as? String ?? "")) \((d["fg"] as? String ?? "")".trimmingCharacters(in: .whitespaces)
-            )
-        }
+        let days: [BackupDay] = fArr.map { d in makeDay(d) }
         // 生活指数：dataZS.zs 里 *_name / *_hint 成对出现，按常用顺序取
         var indices: [(name: String, hint: String)] = []
         if let zs = (extractVar("dataZS", in: text) as? [String: Any])?["zs"] as? [String: Any] {
@@ -147,6 +138,20 @@ enum BackupService {
             days: days,
             indices: indices,
             alarms: alarms
+        )
+    }
+
+    private static func makeDay(_ d: [String: Any]) -> BackupDay {
+        let windDir = d["fe"] as? String ?? ""
+        let windForce = d["fg"] as? String ?? ""
+        let wind = (windDir + " " + windForce).trimmingCharacters(in: .whitespaces)
+        return BackupDay(
+            label: d["fj"] as? String ?? "",
+            dateText: d["fi"] as? String ?? "",
+            dayCode: mapCode(d["fa"] as? String ?? ""),
+            hi: Double(d["fc"] as? String ?? "") ?? 0,
+            lo: Double(d["fd"] as? String ?? "") ?? 0,
+            windText: wind
         )
     }
 
