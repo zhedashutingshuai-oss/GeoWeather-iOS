@@ -25,6 +25,7 @@ targets:
               NSExceptionAllowsInsecureHTTPLoads: true
             d1.weather.com.cn:
               NSExceptionAllowsInsecureHTTPLoads: true
+        UILaunchStoryboardName: LaunchScreen
         UIStatusBarStyle: UIStatusBarStyleLightContent
         UIViewControllerBasedStatusBarAppearance: false
         UIApplicationSceneManifest:
