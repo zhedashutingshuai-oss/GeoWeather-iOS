@@ -59,9 +59,7 @@ struct WallpaperView: View {
 
     var body: some View {
         ZStack {
-            LinearGradient(colors: [Color(hex: "#3D7BDB"), Color(hex: "#7FB2F0")],
-                           startPoint: .top, endPoint: .bottom)
-                .ignoresSafeArea()
+            PageGradient()
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {

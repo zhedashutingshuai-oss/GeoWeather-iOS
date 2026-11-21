@@ -5,18 +5,19 @@ import UIKit
 struct ToolsView: View {
     @EnvironmentObject var lm: LocationManager
     @State private var copied = false
+    @AppStorage("appearanceMode") private var appearanceMode = "system"
+    @Namespace private var appearanceNS
 
     var body: some View {
         ZStack {
-            LinearGradient(colors: [Color(hex: "#3D7BDB"), Color(hex: "#7FB2F0")],
-                           startPoint: .top, endPoint: .bottom)
-                .ignoresSafeArea()
+            PageGradient()
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     Text("工具")
                         .font(.largeTitle.weight(.bold))
                         .foregroundStyle(.white)
+                    appearanceCard
                     compassCard
                     coordsCard
                 }
@@ -27,6 +28,41 @@ struct ToolsView: View {
         }
         .onAppear { lm.startLiveUpdates() }
         .onDisappear { lm.stopLiveUpdates() }
+    }
+
+    // MARK: - 外观
+
+    private var appearanceCard: some View {
+        Card(title: "外观") {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 0) {
+                    ForEach([("light", "浅色"), ("dark", "深色"), ("system", "跟随手机")], id: \.0) { opt in
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.22)) { appearanceMode = opt.0 }
+                        } label: {
+                            Text(opt.1)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(appearanceMode == opt.0 ? .white : .white.opacity(0.6))
+                                .padding(.horizontal, 13)
+                                .padding(.vertical, 5)
+                                .background {
+                                    if appearanceMode == opt.0 {
+                                        Capsule()
+                                            .fill(Color.white.opacity(0.32))
+                                            .matchedGeometryEffect(id: "appearancePill", in: appearanceNS)
+                                    }
+                                }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(3)
+                .glassEffect(.regular, in: Capsule())
+                Text("深色会把天空场景、卡片和页面底色一起调暗；跟随手机按系统外观自动切换。")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.75))
+            }
+        }
     }
 
     // MARK: - 指南针

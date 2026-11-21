@@ -15,9 +15,7 @@ struct AboutView: View {
 
     var body: some View {
         ZStack {
-            LinearGradient(colors: [Color(hex: "#3D7BDB"), Color(hex: "#7FB2F0")],
-                           startPoint: .top, endPoint: .bottom)
-                .ignoresSafeArea()
+            PageGradient()
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
@@ -32,7 +30,7 @@ struct AboutView: View {
                         Text("当前版本")
                             .font(.subheadline)
                             .foregroundStyle(.white.opacity(0.8))
-                        Text("1.3")
+                        Text("1.0")
                             .font(.system(size: 42, weight: .semibold))
                             .foregroundStyle(.white)
                     }

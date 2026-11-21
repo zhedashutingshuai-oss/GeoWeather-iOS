@@ -114,6 +114,8 @@ struct WeatherHomeView: View {
 struct Card<Content: View>: View {
     let title: String
     @ViewBuilder var content: Content
+    @AppStorage("appearanceMode") private var appearanceMode = "system"
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -124,8 +126,23 @@ struct Card<Content: View>: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .glassEffect(.regular.tint(Color(hex: "#0A2A5E").opacity(0.25)),
+        .glassEffect(.regular.tint(AppearanceHelper.isNight(mode: appearanceMode, scheme: colorScheme)
+                                   ? Color(hex: "#04091D").opacity(0.55)
+                                   : Color(hex: "#0A2A5E").opacity(0.25)),
                      in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+    }
+}
+
+/// 子页面统一背景：随外观模式变色
+struct PageGradient: View {
+    @AppStorage("appearanceMode") private var appearanceMode = "system"
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        LinearGradient(colors: AppearanceHelper.pageGradient(
+                        night: AppearanceHelper.isNight(mode: appearanceMode, scheme: colorScheme)),
+                       startPoint: .top, endPoint: .bottom)
+            .ignoresSafeArea()
     }
 }
 
@@ -244,11 +261,19 @@ struct WeatherPageView: View {
     @State private var staleAt: Date?
     @State private var show15Days = false
     @Namespace private var rangeNS
+    @AppStorage("appearanceMode") private var appearanceMode = "system"
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var hourMetric = 0
+    @Namespace private var metricNS
+
+    private var nightMode: Bool {
+        AppearanceHelper.isNight(mode: appearanceMode, scheme: colorScheme)
+    }
 
     var body: some View {
         ZStack {
             WeatherSceneView(code: forecast?.current.weather_code ?? 0,
-                             isDay: (forecast?.current.is_day ?? 1) == 1,
+                             isDay: !nightMode,
                              animated: true,
                              topDim: true)
                 .ignoresSafeArea()
@@ -299,7 +324,7 @@ struct WeatherPageView: View {
 
     private var gradientPair: (top: String, bottom: String) {
         if let c = forecast?.current {
-            return WeatherCode.gradient(c.weather_code, isDay: c.is_day == 1)
+            return WeatherCode.gradient(c.weather_code, isDay: !nightMode)
         }
         return ("#3D7BDB", "#7FB2F0")
     }
@@ -348,14 +373,14 @@ struct WeatherPageView: View {
         let c = f.current
         return Card(title: "当前天气") {
             HStack(alignment: .center, spacing: 16) {
-                if c.is_day == 1 && c.weather_code == 0 {
+                if !nightMode && c.weather_code == 0 {
                     // 晴天：顶部场景已有大太阳，卡内不再重复放太阳
                     EmptyView()
-                } else if c.is_day == 1 && (c.weather_code == 1 || c.weather_code == 2) {
+                } else if !nightMode && (c.weather_code == 1 || c.weather_code == 2) {
                     // 晴间多云：只留云朵图标，太阳交给顶部场景
                     WeatherIcon(code: 3, isDay: true, size: 76, animated: false)
                 } else {
-                    WeatherIcon(code: c.weather_code, isDay: c.is_day == 1, size: 76, animated: false)
+                    WeatherIcon(code: c.weather_code, isDay: !nightMode, size: 76, animated: false)
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     Text("\(Int(c.temperature_2m.rounded()))°")
@@ -406,6 +431,8 @@ struct WeatherPageView: View {
         let code: Int
         let temp: Double
         let precip: Int?
+        let wind: Double
+        let uv: Double
     }
 
     private func currentHourIndex(_ f: ForecastResponse) -> Int {
@@ -421,49 +448,94 @@ struct WeatherPageView: View {
             HourItem(hour: String(f.hourly.time[i].dropFirst(11).prefix(5)),
                      code: f.hourly.weather_code[i],
                      temp: f.hourly.temperature_2m[i],
-                     precip: f.hourly.precipitation_probability?[i] ?? nil)
+                     precip: f.hourly.precipitation_probability?[i] ?? nil,
+                     wind: f.hourly.wind_speed_10m[i],
+                     uv: f.hourly.uv_index[i])
         }
     }
 
     private func hourlyCard(_ f: ForecastResponse) -> some View {
         let items = next24Hours(f)
         let colW: CGFloat = 54
+        let metricNames = ["温度", "降水", "风速", "紫外线"]
+        let metricColors = [Color(hex: "#FFD37F"), Color(hex: "#7FD4FF"), Color(hex: "#9FE8C1"), Color(hex: "#FFB35C")]
+        let metricUnits = ["°", "%", " km/h", ""]
+        let values: [Double] = {
+            switch hourMetric {
+            case 1: return items.map { Double($0.precip ?? 0) }
+            case 2: return items.map(\.wind)
+            case 3: return items.map(\.uv)
+            default: return items.map(\.temp)
+            }
+        }()
         return Card(title: "逐小时预报") {
-            ScrollView(.horizontal, showsIndicators: false) {
-                VStack(spacing: 2) {
+            VStack(spacing: 8) {
+                HStack {
+                    Spacer()
                     HStack(spacing: 0) {
-                        ForEach(items.indices, id: \.self) { idx in
-                            let item = items[idx]
-                            VStack(spacing: 6) {
-                                Text(idx == 0 ? "现在" : item.hour)
-                                    .font(.caption)
-                                    .foregroundStyle(.white.opacity(0.85))
-                                WeatherIcon(code: item.code, isDay: true, size: 26)
-                                Text("\(Int(item.temp.rounded()))°")
-                                    .font(.subheadline.weight(.semibold))
-                                Text(item.precip.map { "\($0)%" } ?? " ")
-                                    .font(.caption2)
-                                    .foregroundStyle(Color(hex: "#BFE0FF"))
+                        ForEach(metricNames.indices, id: \.self) { mi in
+                            Button {
+                                withAnimation(.easeInOut(duration: 0.22)) { hourMetric = mi }
+                            } label: {
+                                Text(metricNames[mi])
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(hourMetric == mi ? .white : .white.opacity(0.6))
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 4)
+                                    .background {
+                                        if hourMetric == mi {
+                                            Capsule()
+                                                .fill(Color.white.opacity(0.32))
+                                                .matchedGeometryEffect(id: "metricPill", in: metricNS)
+                                        }
+                                    }
                             }
-                            .frame(width: colW)
+                            .buttonStyle(.plain)
                         }
                     }
-                    tempCurve(items: items, colW: colW)
-                        .frame(width: colW * CGFloat(items.count), height: 46)
+                    .padding(3)
+                    .glassEffect(.regular, in: Capsule())
+                }
+                ScrollView(.horizontal, showsIndicators: false) {
+                    VStack(spacing: 2) {
+                        HStack(spacing: 0) {
+                            ForEach(items.indices, id: \.self) { idx in
+                                let item = items[idx]
+                                VStack(spacing: 6) {
+                                    Text(idx == 0 ? "现在" : item.hour)
+                                        .font(.caption)
+                                        .foregroundStyle(.white.opacity(0.85))
+                                    WeatherIcon(code: item.code, isDay: true, size: 26)
+                                    Text("\(Int(item.temp.rounded()))°")
+                                        .font(.subheadline.weight(.semibold))
+                                    Text(item.precip.map { "\($0)%" } ?? " ")
+                                        .font(.caption2)
+                                        .foregroundStyle(Color(hex: "#BFE0FF"))
+                                }
+                                .frame(width: colW)
+                            }
+                        }
+                        metricCurve(values: values, color: metricColors[hourMetric], colW: colW)
+                            .frame(width: colW * CGFloat(items.count), height: 46)
+                    }
+                }
+                if let lo = values.min(), let hi = values.max() {
+                    Text("\(metricNames[hourMetric])区间：\(Int(lo.rounded()))\(metricUnits[hourMetric]) ~ \(Int(hi.rounded()))\(metricUnits[hourMetric])")
+                        .font(.caption2)
+                        .foregroundStyle(.white.opacity(0.65))
                 }
             }
         }
     }
 
-    /// 温度曲线：平滑折线 + 数据点
-    private func tempCurve(items: [HourItem], colW: CGFloat) -> some View {
-        let temps = items.map(\.temp)
-        let lo = (temps.min() ?? 0) - 1
-        let hi = (temps.max() ?? 1) + 1
+    /// 通用指标曲线：平滑折线 + 数据点（温度/降水/风速/紫外线共用）
+    private func metricCurve(values: [Double], color: Color, colW: CGFloat) -> some View {
+        let lo = (values.min() ?? 0) - 1
+        let hi = (values.max() ?? 1) + 1
         let h: CGFloat = 46
-        let points: [CGPoint] = items.enumerated().map { i, item in
+        let points: [CGPoint] = values.enumerated().map { i, v in
             let x = colW * CGFloat(i) + colW / 2
-            let frac = hi > lo ? (item.temp - lo) / (hi - lo) : 0.5
+            let frac = hi > lo ? (v - lo) / (hi - lo) : 0.5
             let y = h - 8 - CGFloat(frac) * (h - 16)
             return CGPoint(x: x, y: y)
         }
@@ -482,13 +554,12 @@ struct WeatherPageView: View {
                     path.addLine(to: points[1])
                 }
             }
-            .stroke(Color(hex: "#FFD37F"), style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+            .stroke(color, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
             ForEach(points.indices, id: \.self) { pi in
-                let p = points[pi]
                 Circle()
-                    .fill(Color(hex: "#FFD37F"))
+                    .fill(color)
                     .frame(width: 5, height: 5)
-                    .position(p)
+                    .position(points[pi])
             }
         }
     }
@@ -732,6 +803,11 @@ struct WeatherPageView: View {
                         Text("月相 · \(phase.name)")
                             .font(.subheadline.weight(.medium))
                         Text("照亮 \(Int(phase.illumination * 100))% · 月龄 \(String(format: "%.1f", phase.age)) 天")
+                            .font(.caption)
+                            .foregroundStyle(.white.opacity(0.8))
+                        let mtz = TimeZone(identifier: f.timezone) ?? .current
+                        let mt = MoonTimes.riseSet(on: Date(), lat: city.latitude, lon: city.longitude, timeZone: mtz)
+                        Text("月出 \(mt.rise.map { hhmmTZ($0, mtz) } ?? "—") · 月落 \(mt.set.map { hhmmTZ($0, mtz) } ?? "—")（本地推算）")
                             .font(.caption)
                             .foregroundStyle(.white.opacity(0.8))
                     }
@@ -982,6 +1058,13 @@ struct WeatherPageView: View {
     }
 
     // MARK: - Helpers
+
+    private func hhmmTZ(_ d: Date, _ tz: TimeZone) -> String {
+        let fmt = DateFormatter()
+        fmt.dateFormat = "HH:mm"
+        fmt.timeZone = tz
+        return fmt.string(from: d)
+    }
 
     private func hhmmString(_ d: Date) -> String {
         let fmt = DateFormatter()

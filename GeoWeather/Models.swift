@@ -57,6 +57,8 @@ struct HourlyWeather: Codable {
     let precipitation: [Double]
     let visibility: [Double]
     let dew_point_2m: [Double]
+    let wind_speed_10m: [Double]
+    let uv_index: [Double]
 }
 
 struct DailyWeather: Codable {

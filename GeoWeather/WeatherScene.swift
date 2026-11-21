@@ -406,3 +406,83 @@ enum LunarDate {
         return "农历\(leap)\(monthNames[month - 1])月\(dayNames[day - 1])"
     }
 }
+
+// MARK: - 月出月落（suncalc 算法本地推算）
+// 已与 weather.com 晋城数据对照（2026-11-21/22）：月出误差 +2 分钟、月落 +6~7 分钟
+
+enum MoonTimes {
+    static func riseSet(on date: Date, lat: Double, lon: Double, timeZone: TimeZone) -> (rise: Date?, set: Date?) {
+        let rad = Double.pi / 180
+        let e = rad * 23.4397
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = timeZone
+        let t0 = cal.startOfDay(for: date)
+        func altitude(_ d: Date) -> Double {
+            let days = d.timeIntervalSince1970 / 86400 - 0.5 + 2440588 - 2451545
+            let L = rad * (218.316 + 13.176396 * days)
+            let M = rad * (134.963 + 13.064993 * days)
+            let F = rad * (93.272 + 13.229350 * days)
+            let l = L + rad * 6.289 * sin(M)
+            let b = rad * 5.128 * sin(F)
+            let ra = atan2(sin(l) * cos(e) - tan(b) * sin(e), cos(l))
+            let dec = asin(sin(b) * cos(e) + cos(b) * sin(e) * sin(l))
+            let lw = rad * -lon
+            let phi = rad * lat
+            let H = (rad * (280.16 + 360.9856235 * days) - lw) - ra
+            return asin(sin(phi) * sin(dec) + cos(phi) * cos(dec) * cos(H))
+        }
+        let hc = 0.133 * rad
+        var h0 = altitude(t0) - hc
+        var rise: Date?
+        var set: Date?
+        var i = 1
+        while i <= 24 {
+            let h1 = altitude(t0.addingTimeInterval(Double(i) * 3600)) - hc
+            let h2 = altitude(t0.addingTimeInterval(Double(i + 1) * 3600)) - hc
+            let a = (h0 + h2) / 2 - h1
+            let b = (h2 - h0) / 2
+            let xe = a != 0 ? -b / (2 * a) : 0
+            let ye = (a * xe + b) * xe + h1
+            let disc = b * b - 4 * a * h1
+            var roots = 0
+            var x1 = 0.0
+            var x2 = 0.0
+            if disc >= 0 && a != 0 {
+                let dx = sqrt(disc) / (abs(a) * 2)
+                x1 = xe - dx
+                x2 = xe + dx
+                if abs(x1) <= 1 { roots += 1 }
+                if abs(x2) <= 1 { roots += 1 }
+                if x1 < -1 { x1 = x2 }
+            }
+            if roots == 1 {
+                if h0 < 0 { rise = t0.addingTimeInterval((Double(i) + x1) * 3600) }
+                else { set = t0.addingTimeInterval((Double(i) + x1) * 3600) }
+            } else if roots == 2 {
+                rise = t0.addingTimeInterval((Double(i) + (ye < 0 ? x2 : x1)) * 3600)
+                set = t0.addingTimeInterval((Double(i) + (ye < 0 ? x1 : x2)) * 3600)
+            }
+            if rise != nil && set != nil { break }
+            h0 = h2
+            i += 2
+        }
+        return (rise, set)
+    }
+}
+
+// MARK: - 外观模式（浅色 / 深色 / 跟随手机）
+
+enum AppearanceHelper {
+    static func isNight(mode: String, scheme: ColorScheme) -> Bool {
+        switch mode {
+        case "light": return false
+        case "dark": return true
+        default: return scheme == .dark
+        }
+    }
+
+    static func pageGradient(night: Bool) -> [Color] {
+        night ? [Color(hex: "#0A1830"), Color(hex: "#1D3358")]
+              : [Color(hex: "#3D7BDB"), Color(hex: "#7FB2F0")]
+    }
+}
