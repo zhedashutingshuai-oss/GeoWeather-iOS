@@ -45,43 +45,63 @@ enum BackupService {
 
     private static let browserUA = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15"
 
-    private static func fetchOnce(for city: City) async throws -> BackupWeather {
-        let params = "{\"method\":\"stationinfo\",\"lat\":\(city.latitude),\"lng\":\(city.longitude),\"callback\":\"getData\"}"
-        // 严格编码：只留字母数字与 -._~，与服务端验证通过的请求保持一致
-        let strict = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~").inverted
-        let encoded = params.addingPercentEncoding(withAllowedCharacters: strict) ?? params
-        guard let geoURL = URL(string: "https://d4.weather.com.cn/geong/v1/api?params=\(encoded)") else {
-            throw URLError(.badURL)
-        }
-        var req = URLRequest(url: geoURL)
-        req.setValue("https://www.weather.com.cn/", forHTTPHeaderField: "Referer")
+    /// 先 HTTPS，传输层失败则降级 HTTP 再试（weather.com.cn 两套都提供；Info.plist 已为这两个域名开 ATS 例外）
+    private static func fetchData(_ url: URL, referer: String) async throws -> (Data, URLResponse) {
+        var req = URLRequest(url: url)
+        req.setValue(referer, forHTTPHeaderField: "Referer")
         req.setValue(browserUA, forHTTPHeaderField: "User-Agent")
-        let d1: Data
-        let resp1: URLResponse
         do {
-            (d1, resp1) = try await URLSession.shared.data(for: req)
+            return try await URLSession.shared.data(for: req)
         } catch {
-            throw BackupFailure(stage: "城市编号接口连接失败")
+            var comps = URLComponents(url: url, resolvingAgainstBaseURL: false)
+            comps?.scheme = "http"
+            guard let httpURL = comps?.url else { throw error }
+            var httpReq = req
+            httpReq.url = httpURL
+            return try await URLSession.shared.data(for: httpReq)
         }
-        if let http = resp1 as? HTTPURLResponse, http.statusCode != 200 {
-            throw BackupFailure(stage: "城市编号接口返回 HTTP \(http.statusCode)")
-        }
-        let t1 = String(decoding: d1, as: UTF8.self)
-        guard let areaid = firstCapture(#""areaid":"(\d+)""#, in: t1) else {
-            throw BackupFailure(stage: "城市编号解析失败")
+    }
+
+    private static func fetchOnce(for city: City) async throws -> BackupWeather {
+        // areaid 成功解析一次后缓存，之后不再依赖编号接口
+        let cacheKey = "backup.areaid.\(city.id)"
+        let areaid: String
+        if let cached = UserDefaults.standard.string(forKey: cacheKey), !cached.isEmpty {
+            areaid = cached
+        } else {
+            let params = "{\"method\":\"stationinfo\",\"lat\":\(city.latitude),\"lng\":\(city.longitude),\"callback\":\"getData\"}"
+            // 严格编码：只留字母数字与 -._~，与服务端验证通过的请求保持一致
+            let strict = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~").inverted
+            let encoded = params.addingPercentEncoding(withAllowedCharacters: strict) ?? params
+            guard let geoURL = URL(string: "https://d4.weather.com.cn/geong/v1/api?params=\(encoded)") else {
+                throw BackupFailure(stage: "城市编号接口地址无效")
+            }
+            let d1: Data
+            let resp1: URLResponse
+            do {
+                (d1, resp1) = try await fetchData(geoURL, referer: "https://www.weather.com.cn/")
+            } catch {
+                throw BackupFailure(stage: "城市编号接口连接失败（错误 \((error as NSError).code)）")
+            }
+            if let http = resp1 as? HTTPURLResponse, http.statusCode != 200 {
+                throw BackupFailure(stage: "城市编号接口返回 HTTP \(http.statusCode)")
+            }
+            let t1 = String(decoding: d1, as: UTF8.self)
+            guard let resolved = firstCapture(#""areaid":"(\d+)""#, in: t1) else {
+                throw BackupFailure(stage: "城市编号解析失败")
+            }
+            areaid = resolved
+            UserDefaults.standard.set(resolved, forKey: cacheKey)
         }
         guard let dataURL = URL(string: "https://d1.weather.com.cn/weather_index/\(areaid).html") else {
-            throw URLError(.badURL)
+            throw BackupFailure(stage: "数据接口地址无效")
         }
-        var req2 = URLRequest(url: dataURL)
-        req2.setValue("https://www.weather.com.cn/weather/\(areaid).shtml", forHTTPHeaderField: "Referer")
-        req2.setValue(browserUA, forHTTPHeaderField: "User-Agent")
         let d2: Data
         let resp2: URLResponse
         do {
-            (d2, resp2) = try await URLSession.shared.data(for: req2)
+            (d2, resp2) = try await fetchData(dataURL, referer: "https://www.weather.com.cn/weather/\(areaid).shtml")
         } catch {
-            throw BackupFailure(stage: "数据接口连接失败")
+            throw BackupFailure(stage: "数据接口连接失败（错误 \((error as NSError).code)）")
         }
         if let http = resp2 as? HTTPURLResponse, http.statusCode != 200 {
             throw BackupFailure(stage: "数据接口被拦（HTTP \(http.statusCode)）")
