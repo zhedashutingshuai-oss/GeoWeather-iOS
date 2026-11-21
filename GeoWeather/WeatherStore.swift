@@ -10,14 +10,17 @@ final class WeatherStore: ObservableObject {
     private static let storageKey = "savedCities.v1"
 
     init() {
+        // 先算到本地变量再赋给属性：init 里在所有属性就绪前不能回读 self 的属性（编译器铁律）
+        let initialCities: [City]
         if let data = UserDefaults.standard.data(forKey: Self.storageKey),
            let saved = try? JSONDecoder().decode([City].self, from: data),
            !saved.isEmpty {
-            cities = saved
+            initialCities = saved
         } else {
-            cities = [.beijing]
+            initialCities = [.beijing]
         }
-        selectedID = cities[0].id
+        cities = initialCities
+        selectedID = initialCities[0].id
     }
 
     var selectedCity: City {
