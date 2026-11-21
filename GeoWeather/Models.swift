@@ -20,14 +20,14 @@ struct City: Identifiable, Codable, Equatable {
                               latitude: 39.9042, longitude: 116.4074)
 }
 
-struct ForecastResponse: Decodable {
+struct ForecastResponse: Codable {
     let timezone: String
     let current: CurrentWeather
     let hourly: HourlyWeather
     let daily: DailyWeather
 }
 
-struct CurrentWeather: Decodable {
+struct CurrentWeather: Codable {
     let time: String
     let temperature_2m: Double
     let relative_humidity_2m: Int
@@ -42,7 +42,7 @@ struct CurrentWeather: Decodable {
     let wind_gusts_10m: Double
 }
 
-struct HourlyWeather: Decodable {
+struct HourlyWeather: Codable {
     let time: [String]
     let temperature_2m: [Double]
     let weather_code: [Int]
@@ -52,7 +52,7 @@ struct HourlyWeather: Decodable {
     let dew_point_2m: [Double]
 }
 
-struct DailyWeather: Decodable {
+struct DailyWeather: Codable {
     let time: [String]
     let weather_code: [Int]
     let temperature_2m_max: [Double]
@@ -71,11 +71,11 @@ struct APIErrorResponse: Decodable {
     let reason: String
 }
 
-struct AirQualityResponse: Decodable {
+struct AirQualityResponse: Codable {
     let current: AirQualityCurrent
 }
 
-struct AirQualityCurrent: Decodable {
+struct AirQualityCurrent: Codable {
     let us_aqi: Double?
     let pm2_5: Double?
     let pm10: Double?

@@ -1,7 +1,33 @@
 import Foundation
 
 enum WeatherService {
+    /// 带重试的请求：网络层错误（TLS 瞬断、超时等）自动重试 3 次，间隔递增；
+    /// API 业务错误（domain == "OpenMeteo"，如参数非法）与任务取消不重试，直接抛出。
+    private static func withRetry<T>(_ operation: () async throws -> T) async throws -> T {
+        let delays: [UInt64] = [0, 1_200_000_000, 2_500_000_000]
+        var lastError: Error = URLError(.unknown)
+        for delay in delays {
+            if delay > 0 { try? await Task.sleep(nanoseconds: delay) }
+            do {
+                return try await operation()
+            } catch {
+                if (error as NSError).domain == "OpenMeteo" { throw error }
+                if error is CancellationError { throw error }
+                lastError = error
+            }
+        }
+        throw lastError
+    }
+
     static func fetchForecast(for city: City) async throws -> ForecastResponse {
+        try await withRetry { try await fetchForecastOnce(for: city) }
+    }
+
+    static func fetchAirQuality(for city: City) async throws -> AirQualityResponse {
+        try await withRetry { try await fetchAirQualityOnce(for: city) }
+    }
+
+    private static func fetchForecastOnce(for city: City) async throws -> ForecastResponse {
         var comps = URLComponents(string: "https://api.open-meteo.com/v1/forecast")!
         comps.queryItems = [
             .init(name: "latitude", value: "\(city.latitude)"),
@@ -21,7 +47,7 @@ enum WeatherService {
         return try JSONDecoder().decode(ForecastResponse.self, from: data)
     }
 
-    static func fetchAirQuality(for city: City) async throws -> AirQualityResponse {
+    private static func fetchAirQualityOnce(for city: City) async throws -> AirQualityResponse {
         var comps = URLComponents(string: "https://air-quality-api.open-meteo.com/v1/air-quality")!
         comps.queryItems = [
             .init(name: "latitude", value: "\(city.latitude)"),

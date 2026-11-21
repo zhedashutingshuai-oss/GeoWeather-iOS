@@ -125,6 +125,8 @@ struct WeatherPageView: View {
     @State private var forecast: ForecastResponse?
     @State private var air: AirQualityResponse?
     @State private var errorText: String?
+    /// 非 nil 表示当前展示的是缓存数据（网络不佳时的兜底），值为缓存保存时间
+    @State private var staleAt: Date?
 
     var body: some View {
         ZStack {
@@ -204,6 +206,11 @@ struct WeatherPageView: View {
                 Text("更新于 \(String(t.dropFirst(11).prefix(5)))")
                     .font(.caption)
                     .foregroundStyle(.white.opacity(0.7))
+            }
+            if let staleAt {
+                Text("网络不佳 · 显示 \(hhmmString(staleAt)) 的缓存")
+                    .font(.caption)
+                    .foregroundStyle(.yellow.opacity(0.95))
             }
         }
         .frame(maxWidth: .infinity)
@@ -681,15 +688,33 @@ struct WeatherPageView: View {
 
     // MARK: - Helpers
 
+    private func hhmmString(_ d: Date) -> String {
+        let fmt = DateFormatter()
+        fmt.dateFormat = "HH:mm"
+        return fmt.string(from: d)
+    }
+
     private func load() async {
+        // 冷启动先垫缓存，页面立刻有内容，再等网络刷新
+        if forecast == nil, let cached = ForecastCache.load(for: city) {
+            forecast = cached.forecast
+            staleAt = cached.savedAt
+        }
         do {
             let f = try await WeatherService.fetchForecast(for: city)
             forecast = f
             errorText = nil
+            staleAt = nil
+            ForecastCache.save(f, for: city)
             SharedSnapshotStore.save(SharedSnapshot.make(from: f, city: city))
             WidgetCenter.shared.reloadAllTimelines()
         } catch {
-            if forecast == nil {
+            if let cached = ForecastCache.load(for: city) {
+                // 重试后仍失败：用缓存兜底，不整页报错
+                forecast = cached.forecast
+                staleAt = cached.savedAt
+                errorText = nil
+            } else if forecast == nil {
                 let desc = (error as NSError).localizedDescription
                 errorText = desc.isEmpty || desc.contains("data") ? "加载失败，请下拉重试" : "加载失败：\(desc)"
             }
