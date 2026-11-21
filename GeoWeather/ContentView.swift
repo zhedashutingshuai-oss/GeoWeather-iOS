@@ -381,15 +381,7 @@ struct WeatherPageView: View {
         let c = f.current
         return Card(title: "当前天气") {
             HStack(alignment: .center, spacing: 16) {
-                if !nightMode && c.weather_code == 0 {
-                    // 晴天：顶部场景已有大太阳，卡内不再重复放太阳
-                    EmptyView()
-                } else if !nightMode && (c.weather_code == 1 || c.weather_code == 2) {
-                    // 晴间多云：只留云朵图标，太阳交给顶部场景
-                    WeatherIcon(code: 3, isDay: true, size: 76, animated: false)
-                } else {
-                    WeatherIcon(code: c.weather_code, isDay: !nightMode, size: 76, animated: false)
-                }
+                // 当前卡只要数据：不放天气图标（用户 2026-11-21 定）
                 VStack(alignment: .leading, spacing: 2) {
                     Text("\(Int(c.temperature_2m.rounded()))°")
                         .font(.system(size: 64, weight: .thin))
