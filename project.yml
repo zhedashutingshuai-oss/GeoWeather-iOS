@@ -13,6 +13,10 @@ targets:
       path: GeoWeather/Info.plist
       properties:
         CFBundleDisplayName: 司天
+        CFBundleIcons:
+          CFBundlePrimaryIcon:
+            CFBundleIconFiles:
+              - AppIcon1024
         NSLocationWhenInUseUsageDescription: 用于显示你所在位置的天气
         NSPhotoLibraryAddUsageDescription: 用于把生成的天气壁纸保存到相册
         UIStatusBarStyle: UIStatusBarStyleLightContent
@@ -33,15 +37,13 @@ targets:
         CURRENT_PROJECT_VERSION: "1"
         SWIFT_VERSION: "5.0"
         TARGETED_DEVICE_FAMILY: "1"
-        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-    preBuildScripts:
-      - name: Generate App Icon
+    postBuildScripts:
+      - name: Inject App Icon
         script: |
           set -e
-          cd "$SRCROOT"
-          OUT="GeoWeather/Assets.xcassets/AppIcon.appiconset/icon-1024.png"
-          if [ ! -f "$OUT" ]; then
-            base64 -D -i "GeoWeather/AppIcon/icon-1024.b64" -o "$OUT"
+          DEST="$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/AppIcon1024.png"
+          if [ ! -f "$DEST" ]; then
+            base64 -D -i "$SRCROOT/GeoWeather/AppIcon/icon-1024.b64" -o "$DEST"
           fi
         basedOnDependencyAnalysis: false
     dependencies:
