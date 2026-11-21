@@ -1271,10 +1271,12 @@ struct WeatherPageView: View {
                 errorText = nil
             } else if forecast == nil {
                 // 主源与缓存都不可用：切国内备用源（中国天气网）兜底
-                if let b = try? await BackupService.fetch(for: city) {
-                    backup = b
+                do {
+                    backup = try await BackupService.fetch(for: city)
                     errorText = nil
-                } else {
+                } catch let e as BackupFailure {
+                    errorText = "网络连接失败，正在自动重试…（也可以下拉刷新）\n备用源未接通：\(e.stage)"
+                } catch {
                     errorText = "网络连接失败，正在自动重试…（也可以下拉刷新）"
                 }
             }

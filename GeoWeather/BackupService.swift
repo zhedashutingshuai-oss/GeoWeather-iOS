@@ -28,29 +28,69 @@ struct BackupWeather {
     let alarms: [String]
 }
 
+/// 备用源失败时卡在哪一步（回传给界面显示，避免只留一句「正在重试」）
+struct BackupFailure: Error {
+    let stage: String
+}
+
 enum BackupService {
     static func fetch(for city: City) async throws -> BackupWeather {
+        var lastError: Error?
+        for attempt in 0..<2 {
+            if attempt > 0 { try? await Task.sleep(nanoseconds: 1_500_000_000) }
+            do { return try await fetchOnce(for: city) } catch { lastError = error }
+        }
+        throw lastError ?? URLError(.unknown)
+    }
+
+    private static let browserUA = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15"
+
+    private static func fetchOnce(for city: City) async throws -> BackupWeather {
         let params = "{\"method\":\"stationinfo\",\"lat\":\(city.latitude),\"lng\":\(city.longitude),\"callback\":\"getData\"}"
-        let encoded = params.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? params
+        // 严格编码：只留字母数字与 -._~，与服务端验证通过的请求保持一致
+        let strict = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~").inverted
+        let encoded = params.addingPercentEncoding(withAllowedCharacters: strict) ?? params
         guard let geoURL = URL(string: "https://d4.weather.com.cn/geong/v1/api?params=\(encoded)") else {
             throw URLError(.badURL)
         }
         var req = URLRequest(url: geoURL)
         req.setValue("https://www.weather.com.cn/", forHTTPHeaderField: "Referer")
-        let (d1, _) = try await URLSession.shared.data(for: req)
+        req.setValue(browserUA, forHTTPHeaderField: "User-Agent")
+        let d1: Data
+        let resp1: URLResponse
+        do {
+            (d1, resp1) = try await URLSession.shared.data(for: req)
+        } catch {
+            throw BackupFailure(stage: "城市编号接口连接失败")
+        }
+        if let http = resp1 as? HTTPURLResponse, http.statusCode != 200 {
+            throw BackupFailure(stage: "城市编号接口返回 HTTP \(http.statusCode)")
+        }
         let t1 = String(decoding: d1, as: UTF8.self)
         guard let areaid = firstCapture(#""areaid":"(\d+)""#, in: t1) else {
-            throw URLError(.cannotParseResponse)
+            throw BackupFailure(stage: "城市编号解析失败")
         }
         guard let dataURL = URL(string: "https://d1.weather.com.cn/weather_index/\(areaid).html") else {
             throw URLError(.badURL)
         }
         var req2 = URLRequest(url: dataURL)
         req2.setValue("https://www.weather.com.cn/weather/\(areaid).shtml", forHTTPHeaderField: "Referer")
-        req2.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15",
-                      forHTTPHeaderField: "User-Agent")
-        let (d2, _) = try await URLSession.shared.data(for: req2)
-        return try parse(String(decoding: d2, as: UTF8.self))
+        req2.setValue(browserUA, forHTTPHeaderField: "User-Agent")
+        let d2: Data
+        let resp2: URLResponse
+        do {
+            (d2, resp2) = try await URLSession.shared.data(for: req2)
+        } catch {
+            throw BackupFailure(stage: "数据接口连接失败")
+        }
+        if let http = resp2 as? HTTPURLResponse, http.statusCode != 200 {
+            throw BackupFailure(stage: "数据接口被拦（HTTP \(http.statusCode)）")
+        }
+        do {
+            return try parse(String(decoding: d2, as: UTF8.self))
+        } catch {
+            throw BackupFailure(stage: "数据解析失败")
+        }
     }
 
     private static func firstCapture(_ pattern: String, in text: String) -> String? {
