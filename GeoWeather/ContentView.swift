@@ -267,6 +267,7 @@ struct WeatherPageView: View {
     @Namespace private var metricNS
     @State private var radarFrames: [RadarFrame] = []
     @State private var showRadar = false
+    @State private var backup: BackupWeather?
 
     private var nightMode: Bool {
         AppearanceHelper.isNight(mode: appearanceMode, scheme: colorScheme)
@@ -299,6 +300,9 @@ struct WeatherPageView: View {
                         detailsGrid(f)
                         lifeCard(f)
                         footer(f)
+                    } else if let b = backup {
+                        backupCards(b)
+                        radarCard
                     } else if let errorText {
                         Text(errorText)
                             .font(.subheadline)
@@ -336,6 +340,14 @@ struct WeatherPageView: View {
             while !Task.isCancelled && forecast == nil {
                 try? await Task.sleep(nanoseconds: 15_000_000_000)
                 if Task.isCancelled || forecast != nil { break }
+                await load()
+            }
+        }
+        .task(id: backup != nil) {
+            guard backup != nil else { return }
+            while !Task.isCancelled && backup != nil {
+                try? await Task.sleep(nanoseconds: 60_000_000_000)
+                if Task.isCancelled || backup == nil { break }
                 await load()
             }
         }
@@ -853,6 +865,133 @@ struct WeatherPageView: View {
 
     // MARK: - 降水预报（逐 15 分钟）
 
+    /// 备用源（中国天气网）整套卡片：主源断连且无缓存时展示
+    private func backupCards(_ b: BackupWeather) -> some View {
+        Group {
+            if !b.alarms.isEmpty {
+                Card(title: "气象预警") {
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(b.alarms, id: \.self) { alarm in
+                            Text("⚠ \(alarm)")
+                                .font(.subheadline)
+                                .foregroundStyle(.orange)
+                        }
+                    }
+                }
+            }
+            Card(title: "当前天气") {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(alignment: .center, spacing: 16) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("\(Int(b.temp.rounded()))°")
+                                .font(.system(size: 64, weight: .thin))
+                            Text(b.weatherText)
+                                .font(.headline)
+                            if !b.todayText.isEmpty {
+                                Text("今日 \(b.todayText)")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.white.opacity(0.85))
+                            }
+                        }
+                        Spacer()
+                        VStack(alignment: .trailing, spacing: 7) {
+                            if let today = b.days.first {
+                                Label("\(Int(today.hi.rounded()))°", systemImage: "arrow.up")
+                                Label("\(Int(today.lo.rounded()))°", systemImage: "arrow.down")
+                            }
+                            Text(b.windText)
+                                .multilineTextAlignment(.trailing)
+                        }
+                        .font(.subheadline)
+                    }
+                    Divider().overlay(.white.opacity(0.25))
+                    HStack {
+                        VStack(spacing: 2) {
+                            Text("\(b.humidity)%").font(.headline)
+                            Text("湿度").font(.caption).foregroundStyle(.white.opacity(0.8))
+                        }
+                        Spacer()
+                        VStack(spacing: 2) {
+                            Text(b.visibility.isEmpty ? "—" : b.visibility).font(.headline)
+                            Text("能见度").font(.caption).foregroundStyle(.white.opacity(0.8))
+                        }
+                        Spacer()
+                        VStack(spacing: 2) {
+                            Text(b.aqi.map { "\($0)" } ?? "—").font(.headline)
+                            Text("空气质量 AQI").font(.caption).foregroundStyle(.white.opacity(0.8))
+                        }
+                        Spacer()
+                        VStack(spacing: 2) {
+                            Text(b.pm25.map { "\($0)" } ?? "—").font(.headline)
+                            Text("PM2.5").font(.caption).foregroundStyle(.white.opacity(0.8))
+                        }
+                    }
+                }
+            }
+            if !b.days.isEmpty {
+                Card(title: "5 日预报") {
+                    VStack(spacing: 12) {
+                        let weekMin = b.days.map(\.lo).min() ?? 0
+                        let weekMax = b.days.map(\.hi).max() ?? 1
+                        ForEach(b.days) { d in
+                            backupDayRow(d, weekMin: weekMin, weekMax: weekMax)
+                        }
+                    }
+                }
+            }
+            if !b.indices.isEmpty {
+                Card(title: "生活指数") {
+                    VStack(alignment: .leading, spacing: 9) {
+                        ForEach(Array(b.indices.enumerated()), id: \.offset) { _, item in
+                            HStack {
+                                Text(item.name)
+                                    .font(.subheadline)
+                                Spacer()
+                                Text(item.hint)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.white.opacity(0.85))
+                            }
+                        }
+                    }
+                }
+            }
+            Text("备用数据源 · 中国天气网（主源暂时连不上，已自动切换；观测时间 \(b.obsTime)）")
+                .font(.caption2)
+                .foregroundStyle(.white.opacity(0.7))
+                .frame(maxWidth: .infinity, alignment: .center)
+        }
+    }
+
+    private func backupDayRow(_ d: BackupDay, weekMin: Double, weekMax: Double) -> some View {
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(d.label).font(.subheadline)
+                Text(d.dateText).font(.caption2).foregroundStyle(.white.opacity(0.7))
+            }
+            .frame(width: 54, alignment: .leading)
+            WeatherIcon(code: d.dayCode, isDay: true, size: 26, animated: false)
+            Text("\(Int(d.lo.rounded()))°")
+                .font(.subheadline)
+                .frame(width: 34, alignment: .trailing)
+            GeometryReader { geo in
+                let span = max(1, weekMax - weekMin)
+                let x0 = (d.lo - weekMin) / span * geo.size.width
+                let w = max(8, (d.hi - d.lo) / span * geo.size.width)
+                ZStack(alignment: .leading) {
+                    Capsule().fill(.white.opacity(0.15))
+                    Capsule()
+                        .fill(LinearGradient(colors: [.cyan, .orange], startPoint: .leading, endPoint: .trailing))
+                        .frame(width: w)
+                        .offset(x: x0)
+                }
+            }
+            .frame(height: 5)
+            Text("\(Int(d.hi.rounded()))°")
+                .font(.subheadline)
+                .frame(width: 34, alignment: .leading)
+        }
+    }
+
     /// 实时雨云卡：中央气象台全国雷达拼图最新一帧，点开看大图与动画
     private var radarCard: some View {
         Card(title: "实时雨云 · 全国雷达") {
@@ -1118,6 +1257,7 @@ struct WeatherPageView: View {
         do {
             let f = try await WeatherService.fetchForecast(for: city)
             forecast = f
+            backup = nil
             errorText = nil
             staleAt = nil
             ForecastCache.save(f, for: city)
@@ -1130,7 +1270,13 @@ struct WeatherPageView: View {
                 staleAt = cached.savedAt
                 errorText = nil
             } else if forecast == nil {
-                errorText = "网络连接失败，正在自动重试…（也可以下拉刷新）"
+                // 主源与缓存都不可用：切国内备用源（中国天气网）兜底
+                if let b = try? await BackupService.fetch(for: city) {
+                    backup = b
+                    errorText = nil
+                } else {
+                    errorText = "网络连接失败，正在自动重试…（也可以下拉刷新）"
+                }
             }
         }
         air = try? await WeatherService.fetchAirQuality(for: city)
