@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 import CoreLocation
 
 final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {

@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 
 final class WeatherStore: ObservableObject {
     @Published var cities: [City] {
