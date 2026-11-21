@@ -1,45 +1,9 @@
 import SwiftUI
-import QuartzCore
 import CoreLocation
 import UIKit
 
-/// 帧率监测：CADisplayLink 数帧，0.5 秒结算一次
-final class FPSMonitor: ObservableObject {
-    @Published var fps: Int = 0
-    private var link: CADisplayLink?
-    private var frames = 0
-    private var last: CFTimeInterval = 0
-
-    func start() {
-        guard link == nil else { return }
-        let l = CADisplayLink(target: self, selector: #selector(tick(_:)))
-        l.add(to: .main, forMode: .common)
-        link = l
-    }
-
-    func stop() {
-        link?.invalidate()
-        link = nil
-        frames = 0
-        last = 0
-    }
-
-    @objc private func tick(_ l: CADisplayLink) {
-        frames += 1
-        if last == 0 { last = l.timestamp; return }
-        let dt = l.timestamp - last
-        if dt >= 0.5 {
-            fps = Int((Double(frames) / dt).rounded())
-            frames = 0
-            last = l.timestamp
-        }
-    }
-}
-
 struct ToolsView: View {
     @EnvironmentObject var lm: LocationManager
-    @StateObject private var fpsMonitor = FPSMonitor()
-    @State private var demoOn = false
     @State private var copied = false
 
     var body: some View {
@@ -55,21 +19,14 @@ struct ToolsView: View {
                         .foregroundStyle(.white)
                     compassCard
                     coordsCard
-                    fpsCard
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 56)
-                .padding(.bottom, 110)
+                .padding(.bottom, 28)
             }
         }
-        .onAppear {
-            lm.startLiveUpdates()
-            fpsMonitor.start()
-        }
-        .onDisappear {
-            lm.stopLiveUpdates()
-            fpsMonitor.stop()
-        }
+        .onAppear { lm.startLiveUpdates() }
+        .onDisappear { lm.stopLiveUpdates() }
     }
 
     // MARK: - 指南针
@@ -160,40 +117,6 @@ struct ToolsView: View {
                         .foregroundStyle(.white)
                 }
                 .font(.subheadline)
-            }
-        }
-    }
-
-    // MARK: - 帧率
-
-    private var fpsCard: some View {
-        Card(title: "帧率演示") {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text("\(fpsMonitor.fps)")
-                        .font(.system(size: 40, weight: .semibold))
-                        .foregroundStyle(.white)
-                    Text("FPS · 屏幕最高 \(UIScreen.main.maximumFramesPerSecond) Hz")
-                        .font(.subheadline)
-                        .foregroundStyle(.white.opacity(0.85))
-                }
-                GeometryReader { geo in
-                    ZStack(alignment: .leading) {
-                        Capsule().fill(Color.white.opacity(0.15)).frame(height: 26)
-                        Circle().fill(Color.white)
-                            .frame(width: 20, height: 20)
-                            .offset(x: demoOn ? geo.size.width - 23 : 3)
-                    }
-                }
-                .frame(height: 26)
-                Text("小球匀速往返，越顺滑说明刷新率越高。")
-                    .font(.caption)
-                    .foregroundStyle(.white.opacity(0.7))
-            }
-            .onAppear {
-                withAnimation(.linear(duration: 1.1).repeatForever(autoreverses: true)) {
-                    demoOn = true
-                }
             }
         }
     }

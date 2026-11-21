@@ -32,7 +32,7 @@ struct AboutView: View {
                         Text("当前版本")
                             .font(.subheadline)
                             .foregroundStyle(.white.opacity(0.8))
-                        Text("1.1")
+                        Text("1.2")
                             .font(.system(size: 42, weight: .semibold))
                             .foregroundStyle(.white)
                     }
@@ -50,16 +50,17 @@ struct AboutView: View {
 
                     Card(title: "功能") {
                         VStack(spacing: 8) {
-                            infoRow("预报", "15 日 · 逐小时 · 空气质量")
-                            infoRow("壁纸", "按当前天气生成，可保存到相册")
-                            infoRow("工具", "指南针 · 坐标 · 帧率演示")
+                            infoRow("预报", "15 日 · 逐小时 · 降水预报")
+                            infoRow("细节", "月相 · 节气 · 空气质量分项")
+                            infoRow("壁纸", "全天气场景图库，可保存到相册")
+                            infoRow("工具", "指南针 · 坐标")
                             infoRow("小组件", "桌面组件（需 SideStore 直装）")
                         }
                     }
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 56)
-                .padding(.bottom, 110)
+                .padding(.bottom, 28)
             }
         }
     }

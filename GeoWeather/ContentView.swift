@@ -34,57 +34,26 @@ enum AppSection: CaseIterable {
     }
 }
 
-/// 底部悬浮玻璃 Dock 栏（仿高刷悬浮窗的胶囊 Dock）
-struct DockBar: View {
-    @Binding var section: AppSection
-
-    var body: some View {
-        HStack(spacing: 4) {
-            ForEach(AppSection.allCases, id: \.self) { item in
-                Button {
-                    withAnimation(.easeInOut(duration: 0.2)) { section = item }
-                } label: {
-                    VStack(spacing: 2) {
-                        Image(systemName: item.icon)
-                            .font(.system(size: 19))
-                        Text(item.label)
-                            .font(.caption2.weight(.medium))
-                    }
-                    .foregroundStyle(section == item ? Color.white : Color.white.opacity(0.65))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 8)
-                    .background {
-                        if section == item {
-                            Capsule().fill(Color.white.opacity(0.28))
-                        }
-                    }
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(5)
-        .glassEffect(.regular.tint(Color(hex: "#0A2A5E").opacity(0.30)), in: Capsule())
-        .shadow(color: .black.opacity(0.25), radius: 12, y: 4)
-    }
-}
-
 struct ContentView: View {
     @State private var section: AppSection = .weather
 
     var body: some View {
-        ZStack(alignment: .bottom) {
-            Group {
-                switch section {
-                case .weather: WeatherHomeView()
-                case .wallpaper: WallpaperView()
-                case .tools: ToolsView()
-                case .about: AboutView()
-                }
+        // 系统原生标签栏：iOS 26 起自带液态玻璃悬浮胶囊与滑动选中药丸
+        TabView(selection: $section) {
+            Tab("天气", systemImage: "cloud.sun.fill", value: AppSection.weather) {
+                WeatherHomeView()
             }
-            DockBar(section: $section)
-                .padding(.horizontal, 30)
-                .padding(.bottom, 10)
+            Tab("壁纸", systemImage: "photo.fill", value: AppSection.wallpaper) {
+                WallpaperView()
+            }
+            Tab("工具", systemImage: "safari.fill", value: AppSection.tools) {
+                ToolsView()
+            }
+            Tab("关于", systemImage: "info.circle.fill", value: AppSection.about) {
+                AboutView()
+            }
         }
+        .tabBarMinimizeBehavior(.never)
     }
 }
 
@@ -276,7 +245,10 @@ struct WeatherPageView: View {
 
     var body: some View {
         ZStack {
-            backgroundGradient.ignoresSafeArea()
+            WeatherSceneView(code: forecast?.current.weather_code ?? 0,
+                             isDay: (forecast?.current.is_day ?? 1) == 1,
+                             animated: true)
+                .ignoresSafeArea()
 
             ScrollView {
                 GlassEffectContainer(spacing: 14) {
@@ -284,8 +256,14 @@ struct WeatherPageView: View {
                     header
                     if let f = forecast {
                         currentCard(f)
+                        if let m = f.minutely_15, !m.precipitation.isEmpty {
+                            precipCard(f, m)
+                        }
                         dailyCard(f)
                         hourlyCard(f)
+                        if let a = air {
+                            aqiCard(a)
+                        }
                         sunCard(f)
                         detailsGrid(f)
                         lifeCard(f)
@@ -306,7 +284,7 @@ struct WeatherPageView: View {
                 .foregroundStyle(.white)
                 .padding(.horizontal, 16)
                 .padding(.top, 60)
-                .padding(.bottom, 110)
+                .padding(.bottom, 28)
                 }
             }
             .refreshable { await load() }
@@ -321,11 +299,6 @@ struct WeatherPageView: View {
             return WeatherCode.gradient(c.weather_code, isDay: c.is_day == 1)
         }
         return ("#3D7BDB", "#7FB2F0")
-    }
-
-    private var backgroundGradient: LinearGradient {
-        LinearGradient(colors: [Color(hex: gradientPair.top), Color(hex: gradientPair.bottom)],
-                       startPoint: .top, endPoint: .bottom)
     }
 
     /// 顶部渐隐罩：内容滚到状态栏/按钮下方时不糊字
@@ -353,6 +326,9 @@ struct WeatherPageView: View {
                     .font(.caption)
                     .foregroundStyle(.white.opacity(0.7))
             }
+            Text(SolarTerm.displayText())
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.white.opacity(0.85))
             if let staleAt {
                 Text("网络不佳 · 显示 \(hhmmString(staleAt)) 的缓存")
                     .font(.caption)
@@ -691,6 +667,19 @@ struct WeatherPageView: View {
                     Label("日落 \(hhmm(set))", systemImage: "sunset.fill")
                 }
                 .font(.subheadline)
+                Divider().overlay(.white.opacity(0.3))
+                HStack(spacing: 12) {
+                    let phase = MoonPhase.now()
+                    MoonView(phase: phase, size: 42)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("月相 · \(phase.name)")
+                            .font(.subheadline.weight(.medium))
+                        Text("照亮 \(Int(phase.illumination * 100))% · 月龄 \(String(format: "%.1f", phase.age)) 天")
+                            .font(.caption)
+                            .foregroundStyle(.white.opacity(0.8))
+                    }
+                    Spacer()
+                }
             }
         }
     }
@@ -716,6 +705,104 @@ struct WeatherPageView: View {
               let now = parseISO(f.current.time, timezone: f.timezone) else { return "" }
         let mins = Int(set.timeIntervalSince(now) / 60)
         return "距日落 \(mins / 60) 小时 \(mins % 60) 分"
+    }
+
+    // MARK: - 降水预报（逐 15 分钟）
+
+    private func precipCard(_ f: ForecastResponse, _ m: MinutelyWeather) -> some View {
+        let start = m.time.firstIndex(where: { $0 >= f.current.time }) ?? max(0, m.time.count - 8)
+        let end = min(start + 8, m.time.count)
+        let values = Array(m.precipitation[start..<end])
+        let times = Array(m.time[start..<end])
+        let wet = values.indices.filter { values[$0] >= 0.1 }
+        let summary: String = {
+            guard let firstWet = wet.first, let lastWet = wet.last else {
+                return "未来 2 小时无降水"
+            }
+            if firstWet == 0 {
+                if lastWet == values.count - 1 { return "降水持续中，2 小时内不会停" }
+                return "正在降水，预计 \(hhmm(times[lastWet + 1])) 前后停"
+            }
+            var s = "约 \(firstWet * 15) 分钟后开始降水"
+            if lastWet < values.count - 1 { s += "，\(hhmm(times[lastWet + 1])) 前后停" }
+            return s
+        }()
+        return Card(title: "降水预报") {
+            VStack(alignment: .leading, spacing: 10) {
+                Text(summary)
+                    .font(.subheadline.weight(.medium))
+                HStack(alignment: .bottom, spacing: 6) {
+                    ForEach(values.indices, id: \.self) { i in
+                        VStack(spacing: 4) {
+                            RoundedRectangle(cornerRadius: 3)
+                                .fill(values[i] >= 0.1 ? Color(hex: "#7FD4FF") : Color.white.opacity(0.22))
+                                .frame(height: 6 + min(38, CGFloat(values[i]) * 9))
+                            Text(hhmm(times[i]))
+                                .font(.caption2)
+                                .foregroundStyle(.white.opacity(0.65))
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - 空气质量分项
+
+    private func aqiCard(_ a: AirQualityResponse) -> some View {
+        let c = a.current
+        let rows: [(String, Double?, Double)] = [
+            ("PM2.5", c.pm2_5, 75),
+            ("PM10", c.pm10, 150),
+            ("二氧化氮", c.nitrogen_dioxide, 80),
+            ("二氧化硫", c.sulphur_dioxide, 150),
+            ("臭氧", c.ozone, 160),
+            ("一氧化碳", c.carbon_monoxide, 4000),
+        ]
+        return Card(title: "空气质量") {
+            VStack(alignment: .leading, spacing: 10) {
+                if let aqi = c.us_aqi {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text("\(Int(aqi.rounded()))")
+                            .font(.system(size: 34, weight: .semibold))
+                        Text("US AQI · \(aqiCategory(aqi))")
+                            .font(.subheadline)
+                            .foregroundStyle(.white.opacity(0.85))
+                    }
+                }
+                ForEach(rows, id: \.0) { row in
+                    if let v = row.1 {
+                        HStack(spacing: 10) {
+                            Text(row.0)
+                                .font(.subheadline)
+                                .frame(width: 62, alignment: .leading)
+                            GeometryReader { geo in
+                                ZStack(alignment: .leading) {
+                                    Capsule().fill(Color.white.opacity(0.16))
+                                    Capsule()
+                                        .fill(barColor(v / row.2))
+                                        .frame(width: max(4, geo.size.width * min(1, v / row.2)))
+                                }
+                            }
+                            .frame(height: 7)
+                            Text("\(Int(v.rounded()))")
+                                .font(.subheadline.weight(.medium))
+                                .frame(width: 40, alignment: .trailing)
+                        }
+                    }
+                }
+                Text("单位 µg/m³ · 条长按国标日均限值比例")
+                    .font(.caption2)
+                    .foregroundStyle(.white.opacity(0.6))
+            }
+        }
+    }
+
+    private func barColor(_ frac: Double) -> Color {
+        if frac < 0.34 { return Color(hex: "#6FCF97") }
+        if frac < 0.67 { return Color(hex: "#FFD94D") }
+        return Color(hex: "#FF8A5C")
     }
 
     // MARK: - 详情网格

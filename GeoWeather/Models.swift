@@ -25,6 +25,13 @@ struct ForecastResponse: Codable {
     let current: CurrentWeather
     let hourly: HourlyWeather
     let daily: DailyWeather
+    let minutely_15: MinutelyWeather?
+}
+
+/// 逐 15 分钟数据（降水预报条用）
+struct MinutelyWeather: Codable {
+    let time: [String]
+    let precipitation: [Double]
 }
 
 struct CurrentWeather: Codable {
@@ -79,6 +86,10 @@ struct AirQualityCurrent: Codable {
     let us_aqi: Double?
     let pm2_5: Double?
     let pm10: Double?
+    let carbon_monoxide: Double?
+    let nitrogen_dioxide: Double?
+    let sulphur_dioxide: Double?
+    let ozone: Double?
 }
 
 struct GeocodingResponse: Decodable {

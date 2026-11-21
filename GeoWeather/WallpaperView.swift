@@ -2,86 +2,58 @@ import SwiftUI
 import Photos
 import UIKit
 
-/// 壁纸画布：所有尺寸按画布大小等比，预览与导出共用同一份排版
-struct WallpaperArtwork: View {
-    let size: CGSize
-    let city: City
-    let forecast: ForecastResponse?
-
-    private var pair: (top: String, bottom: String) {
-        if let c = forecast?.current {
-            return WeatherCode.gradient(c.weather_code, isDay: c.is_day == 1)
-        }
-        return ("#3D7BDB", "#7FB2F0")
-    }
-
-    private var dateLine: String {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "zh_CN")
-        f.dateFormat = "M月d日 EEEE"
-        return f.string(from: Date())
-    }
-
-    var body: some View {
-        ZStack {
-            LinearGradient(colors: [Color(hex: pair.top), Color(hex: pair.bottom)],
-                           startPoint: .top, endPoint: .bottom)
-
-            VStack(spacing: size.height * 0.012) {
-                Text(city.name)
-                    .font(.system(size: size.width * 0.082, weight: .semibold))
-                Text(dateLine)
-                    .font(.system(size: size.width * 0.042))
-                    .foregroundStyle(.white.opacity(0.85))
-
-                Spacer()
-
-                if let f = forecast {
-                    let c = f.current
-                    if c.weather_code == 0 && c.is_day == 1 {
-                        SunIcon(size: size.width * 0.44)
-                    } else {
-                        WeatherIcon(code: c.weather_code, isDay: c.is_day == 1, size: size.width * 0.44)
-                    }
-                    Text("\(Int(c.temperature_2m.rounded()))°")
-                        .font(.system(size: size.width * 0.30, weight: .thin))
-                    Text(WeatherCode.text(c.weather_code))
-                        .font(.system(size: size.width * 0.062, weight: .medium))
-                    if let hi = f.daily.temperature_2m_max.first, let lo = f.daily.temperature_2m_min.first {
-                        Text("\(Int(lo.rounded()))° ~ \(Int(hi.rounded()))° · 体感 \(Int(c.apparent_temperature.rounded()))°")
-                            .font(.system(size: size.width * 0.042))
-                            .foregroundStyle(.white.opacity(0.9))
-                    }
-                } else {
-                    Text("天气加载中…")
-                        .font(.system(size: size.width * 0.05))
-                }
-
-                Spacer()
-
-                Text("几何天气 · Open-Meteo")
-                    .font(.system(size: size.width * 0.034))
-                    .foregroundStyle(.white.opacity(0.65))
-                    .padding(.bottom, size.height * 0.045)
-            }
-            .foregroundStyle(.white)
-            .padding(.top, size.height * 0.10)
-            .frame(width: size.width, height: size.height)
-        }
-        .frame(width: size.width, height: size.height)
-    }
+/// 一个可选的壁纸场景
+struct SceneOption: Identifiable {
+    let id: String
+    let name: String
+    let code: Int
+    let isDay: Bool
 }
 
 struct WallpaperView: View {
     @EnvironmentObject var store: WeatherStore
     @State private var forecast: ForecastResponse?
+    @State private var selectedID: String?
     @State private var saveState = 0 // 0 待保存 1 保存中 2 已保存 3 失败
+
+    private let options: [SceneOption] = [
+        .init(id: "clear-day", name: "晴天", code: 0, isDay: true),
+        .init(id: "partly-day", name: "多云", code: 2, isDay: true),
+        .init(id: "overcast", name: "阴天", code: 3, isDay: true),
+        .init(id: "rain-light", name: "小雨", code: 61, isDay: true),
+        .init(id: "rain-heavy", name: "大雨", code: 65, isDay: true),
+        .init(id: "thunder", name: "雷雨", code: 95, isDay: true),
+        .init(id: "snow", name: "雪天", code: 73, isDay: true),
+        .init(id: "fog", name: "雾天", code: 45, isDay: true),
+        .init(id: "clear-night", name: "晴夜", code: 0, isDay: false),
+        .init(id: "partly-night", name: "多云夜", code: 2, isDay: false),
+    ]
 
     private var city: City { store.selectedCity }
 
+    /// 当前真实天气对应的场景 id（默认选中并打「当前」标）
+    private var currentOptionID: String? {
+        guard let c = forecast?.current else { return nil }
+        switch SceneKind(code: c.weather_code) {
+        case .clear: return c.is_day == 1 ? "clear-day" : "clear-night"
+        case .partly: return c.is_day == 1 ? "partly-day" : "partly-night"
+        case .cloudy, .overcast: return "overcast"
+        case .fog: return "fog"
+        case .drizzle: return "rain-light"
+        case .rain: return c.precipitation >= 2.5 ? "rain-heavy" : "rain-light"
+        case .heavyRain: return "rain-heavy"
+        case .thunder, .hail: return "thunder"
+        case .snow, .heavySnow: return "snow"
+        }
+    }
+
+    private var selected: SceneOption {
+        options.first { $0.id == (selectedID ?? currentOptionID ?? "clear-day") } ?? options[0]
+    }
+
     private var previewSize: CGSize {
         let b = UIScreen.main.bounds
-        let w: CGFloat = 208
+        let w: CGFloat = 218
         return CGSize(width: w, height: w * b.height / b.width)
     }
 
@@ -97,7 +69,7 @@ struct WallpaperView: View {
                         .font(.largeTitle.weight(.bold))
                         .foregroundStyle(.white)
 
-                    WallpaperArtwork(size: previewSize, city: city, forecast: forecast)
+                    canvas(size: previewSize, option: selected)
                         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
                         .shadow(color: .black.opacity(0.3), radius: 16, y: 8)
                         .frame(maxWidth: .infinity)
@@ -113,7 +85,7 @@ struct WallpaperView: View {
                     }
                     .buttonStyle(.glass)
                     .foregroundStyle(.white)
-                    .disabled(forecast == nil || saveState == 1)
+                    .disabled(saveState == 1)
 
                     if saveState == 3 {
                         Text("保存失败：请在系统设置里允许几何天气添加照片。")
@@ -121,17 +93,91 @@ struct WallpaperView: View {
                             .foregroundStyle(.yellow)
                     }
 
-                    Text("按当前选中城市的天气实时生成。iOS 不允许应用直接更换壁纸，保存后去相册或「设置 → 墙纸」里设为壁纸即可；想每天自动换，可以用快捷指令的「设定墙纸」动作选这张最新保存的图。")
+                    Text("全部天气")
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                        .padding(.top, 4)
+
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 10),
+                                        GridItem(.flexible(), spacing: 10),
+                                        GridItem(.flexible(), spacing: 10)], spacing: 14) {
+                        ForEach(options) { option in
+                            Button {
+                                selectedID = option.id
+                                saveState = 0
+                            } label: {
+                                VStack(spacing: 6) {
+                                    ZStack(alignment: .topLeading) {
+                                        WeatherSceneView(code: option.code, isDay: option.isDay, animated: false)
+                                            .frame(height: 128)
+                                            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                                            .overlay {
+                                                if selected.id == option.id {
+                                                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                                        .stroke(Color.white, lineWidth: 2.5)
+                                                }
+                                            }
+                                        if currentOptionID == option.id {
+                                            Text("当前")
+                                                .font(.caption2.weight(.bold))
+                                                .padding(.horizontal, 6)
+                                                .padding(.vertical, 2)
+                                                .background(Capsule().fill(Color(hex: "#FF9435")))
+                                                .foregroundStyle(.white)
+                                                .padding(6)
+                                        }
+                                    }
+                                    Text(option.name)
+                                        .font(.caption.weight(.medium))
+                                        .foregroundStyle(selected.id == option.id ? .white : .white.opacity(0.75))
+                                }
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+
+                    Text("画面跟着天气走：晴天蓝天白云、雨天按雨量落雨滴、阴天灰调、雪天飘雪、夜里有星星月亮。iOS 不允许应用直接更换壁纸，保存后去相册或「设置 → 墙纸」里设为壁纸即可。")
                         .font(.caption)
                         .foregroundStyle(.white.opacity(0.78))
                         .lineSpacing(3)
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 56)
-                .padding(.bottom, 110)
+                .padding(.bottom, 28)
             }
         }
         .task(id: city.id) { await load() }
+    }
+
+    /// 壁纸画布：场景 + 文字（选中当前场景时带实时温度，其余显示场景名）
+    private func canvas(size: CGSize, option: SceneOption) -> some View {
+        ZStack {
+            WeatherSceneView(code: option.code, isDay: option.isDay, animated: false)
+            VStack {
+                Text(city.name)
+                    .font(.system(size: size.width * 0.068, weight: .semibold))
+                    .padding(.top, size.height * 0.085)
+                Spacer()
+                VStack(spacing: size.height * 0.006) {
+                    if option.id == currentOptionID, let f = forecast {
+                        Text("\(Int(f.current.temperature_2m.rounded()))°")
+                            .font(.system(size: size.width * 0.27, weight: .thin))
+                        Text(WeatherCode.text(f.current.weather_code))
+                            .font(.system(size: size.width * 0.05, weight: .medium))
+                    } else {
+                        Text(option.name)
+                            .font(.system(size: size.width * 0.17, weight: .thin))
+                        Text(city.name)
+                            .font(.system(size: size.width * 0.045))
+                            .foregroundStyle(.white.opacity(0.85))
+                    }
+                }
+                .padding(.bottom, size.height * 0.065)
+            }
+            .foregroundStyle(.white)
+            .frame(width: size.width, height: size.height)
+        }
+        .frame(width: size.width, height: size.height)
     }
 
     private func load() async {
@@ -145,11 +191,10 @@ struct WallpaperView: View {
     }
 
     private func save() {
-        guard let f = forecast else { return }
         saveState = 1
         let bounds = UIScreen.main.bounds
         let size = CGSize(width: bounds.width, height: bounds.height)
-        let renderer = ImageRenderer(content: WallpaperArtwork(size: size, city: city, forecast: f))
+        let renderer = ImageRenderer(content: canvas(size: size, option: selected))
         renderer.scale = UIScreen.main.scale
         guard let image = renderer.uiImage else {
             saveState = 3
