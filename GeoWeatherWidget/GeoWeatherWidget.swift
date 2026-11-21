@@ -15,7 +15,7 @@ struct GeoWeatherWidget: Widget {
         StaticConfiguration(kind: "GeoWeatherWidget", provider: Provider()) { entry in
             WidgetEntryView(entry: entry)
         }
-        .configurationDisplayName("几何天气")
+        .configurationDisplayName("司天")
         .description("当前天气、体感与今日高低温")
         .supportedFamilies([.systemSmall, .systemMedium])
     }
@@ -81,7 +81,7 @@ struct WidgetEntryView: View {
                 VStack(spacing: 6) {
                     Image(systemName: "cloud.sun.fill")
                         .font(.title2)
-                    Text("打开几何天气刷新一次")
+                    Text("打开司天刷新一次")
                         .font(.caption)
                         .multilineTextAlignment(.center)
                 }

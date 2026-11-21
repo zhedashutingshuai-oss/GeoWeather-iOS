@@ -12,7 +12,7 @@ targets:
     info:
       path: GeoWeather/Info.plist
       properties:
-        CFBundleDisplayName: 几何天气
+        CFBundleDisplayName: 司天
         NSLocationWhenInUseUsageDescription: 用于显示你所在位置的天气
         NSPhotoLibraryAddUsageDescription: 用于把生成的天气壁纸保存到相册
         UIStatusBarStyle: UIStatusBarStyleLightContent
@@ -29,10 +29,21 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.zhedashutingshuai.geoweather
-        MARKETING_VERSION: "1.2"
+        MARKETING_VERSION: "1.3"
         CURRENT_PROJECT_VERSION: "1"
         SWIFT_VERSION: "5.0"
         TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    preBuildScripts:
+      - name: Generate App Icon
+        script: |
+          set -e
+          cd "$SRCROOT"
+          OUT="GeoWeather/Assets.xcassets/AppIcon.appiconset/icon-1024.png"
+          if [ ! -f "$OUT" ]; then
+            base64 -D -i "GeoWeather/AppIcon/icon-1024.b64" -o "$OUT"
+          fi
+        basedOnDependencyAnalysis: false
     dependencies:
       - target: GeoWeatherWidget
   GeoWeatherWidget:
@@ -51,7 +62,7 @@ targets:
     info:
       path: GeoWeatherWidget/Info.plist
       properties:
-        CFBundleDisplayName: 几何天气
+        CFBundleDisplayName: 司天
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
     entitlements:
@@ -62,7 +73,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.zhedashutingshuai.geoweather.widget
-        MARKETING_VERSION: "1.2"
+        MARKETING_VERSION: "1.3"
         CURRENT_PROJECT_VERSION: "1"
         SWIFT_VERSION: "5.0"
         TARGETED_DEVICE_FAMILY: "1"

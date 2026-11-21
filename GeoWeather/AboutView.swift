@@ -26,13 +26,13 @@ struct AboutView: View {
                         .foregroundStyle(.white)
 
                     VStack(spacing: 4) {
-                        Text("几何天气")
+                        Text("司天")
                             .font(.system(size: 32, weight: .bold))
                             .foregroundStyle(.white)
                         Text("当前版本")
                             .font(.subheadline)
                             .foregroundStyle(.white.opacity(0.8))
-                        Text("1.2")
+                        Text("1.3")
                             .font(.system(size: 42, weight: .semibold))
                             .foregroundStyle(.white)
                     }

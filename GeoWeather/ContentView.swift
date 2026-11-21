@@ -242,12 +242,15 @@ struct WeatherPageView: View {
     @State private var errorText: String?
     /// 非 nil 表示当前展示的是缓存数据（网络不佳时的兜底），值为缓存保存时间
     @State private var staleAt: Date?
+    @State private var show15Days = false
+    @Namespace private var rangeNS
 
     var body: some View {
         ZStack {
             WeatherSceneView(code: forecast?.current.weather_code ?? 0,
                              isDay: (forecast?.current.is_day ?? 1) == 1,
-                             animated: true)
+                             animated: true,
+                             topDim: true)
                 .ignoresSafeArea()
 
             ScrollView {
@@ -326,9 +329,9 @@ struct WeatherPageView: View {
                     .font(.caption)
                     .foregroundStyle(.white.opacity(0.7))
             }
-            Text(SolarTerm.displayText())
+            Text("\(SolarTerm.displayText()) · \(LunarDate.displayText())")
                 .font(.caption.weight(.medium))
-                .foregroundStyle(.white.opacity(0.85))
+                .foregroundStyle(.white.opacity(0.9))
             if let staleAt {
                 Text("网络不佳 · 显示 \(hhmmString(staleAt)) 的缓存")
                     .font(.caption)
@@ -336,6 +339,7 @@ struct WeatherPageView: View {
             }
         }
         .frame(maxWidth: .infinity)
+        .shadow(color: .black.opacity(0.22), radius: 3, x: 0, y: 1)
     }
 
     // MARK: - 当前天气
@@ -344,7 +348,15 @@ struct WeatherPageView: View {
         let c = f.current
         return Card(title: "当前天气") {
             HStack(alignment: .center, spacing: 16) {
-                WeatherIcon(code: c.weather_code, isDay: c.is_day == 1, size: 76, animated: true)
+                if c.is_day == 1 && c.weather_code == 0 {
+                    // 晴天：顶部场景已有大太阳，卡内不再重复放太阳
+                    EmptyView()
+                } else if c.is_day == 1 && (c.weather_code == 1 || c.weather_code == 2) {
+                    // 晴间多云：只留云朵图标，太阳交给顶部场景
+                    WeatherIcon(code: 3, isDay: true, size: 76, animated: true)
+                } else {
+                    WeatherIcon(code: c.weather_code, isDay: c.is_day == 1, size: 76, animated: true)
+                }
                 VStack(alignment: .leading, spacing: 2) {
                     Text("\(Int(c.temperature_2m.rounded()))°")
                         .font(.system(size: 64, weight: .thin))
@@ -483,36 +495,81 @@ struct WeatherPageView: View {
 
     // MARK: - 15 日预报
 
+    /// 7 日 / 15 日切换（液态玻璃分段）
+    private var rangeToggle: some View {
+        HStack(spacing: 0) {
+            ForEach([7, 15], id: \.self) { days in
+                Button {
+                    withAnimation(.easeInOut(duration: 0.22)) { show15Days = (days == 15) }
+                } label: {
+                    Text("\(days) 日")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(show15Days == (days == 15) ? .white : .white.opacity(0.6))
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 5)
+                        .background {
+                            if show15Days == (days == 15) {
+                                Capsule()
+                                    .fill(Color.white.opacity(0.32))
+                                    .matchedGeometryEffect(id: "rangePill", in: rangeNS)
+                            }
+                        }
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(3)
+        .glassEffect(.regular, in: Capsule())
+    }
+
     private func dailyCard(_ f: ForecastResponse) -> some View {
-        let d = f.daily
+        let full = f.daily
+        let n = show15Days ? full.time.count : min(7, full.time.count)
+        let d = DailyWeather(
+            time: Array(full.time.prefix(n)),
+            weather_code: Array(full.weather_code.prefix(n)),
+            temperature_2m_max: Array(full.temperature_2m_max.prefix(n)),
+            temperature_2m_min: Array(full.temperature_2m_min.prefix(n)),
+            sunrise: Array(full.sunrise.prefix(n)),
+            sunset: Array(full.sunset.prefix(n)),
+            uv_index_max: Array(full.uv_index_max.prefix(n)),
+            precipitation_probability_max: full.precipitation_probability_max.map { Array($0.prefix(n)) },
+            precipitation_sum: Array(full.precipitation_sum.prefix(n)),
+            wind_speed_10m_max: Array(full.wind_speed_10m_max.prefix(n)))
         let weekMin = d.temperature_2m_min.min() ?? 0
         let weekMax = d.temperature_2m_max.max() ?? 1
-        return Card(title: "15 日预报") {
-            dailyTrend(d)
-            Divider().overlay(.white.opacity(0.25))
+        return Card(title: show15Days ? "15 日预报" : "7 日预报") {
             VStack(spacing: 10) {
-                ForEach(d.time.indices, id: \.self) { i in
-                    let dateStr = d.time[i]
-                    HStack(spacing: 8) {
-                        Text(weekdayText(dateStr, timezone: f.timezone, index: i))
-                            .font(.subheadline)
-                            .frame(width: 40, alignment: .leading)
-                        WeatherIcon(code: d.weather_code[i], isDay: true, size: 26)
-                            .frame(width: 24)
-                        dailyPrecipText(d, i)
-                            .font(.caption2)
-                            .foregroundStyle(Color(hex: "#BFE0FF"))
-                            .frame(width: 44, alignment: .leading)
-                        Text("\(Int(d.temperature_2m_min[i].rounded()))°")
-                            .font(.subheadline)
-                            .foregroundStyle(.white.opacity(0.85))
-                            .frame(width: 32, alignment: .trailing)
-                        rangeBar(min: d.temperature_2m_min[i], max: d.temperature_2m_max[i],
-                                 weekMin: weekMin, weekMax: weekMax)
-                            .frame(height: 5)
-                        Text("\(Int(d.temperature_2m_max[i].rounded()))°")
-                            .font(.subheadline.weight(.semibold))
-                            .frame(width: 32, alignment: .trailing)
+                HStack {
+                    Spacer()
+                    rangeToggle
+                }
+                dailyTrend(d)
+                Divider().overlay(.white.opacity(0.25))
+                VStack(spacing: 10) {
+                    ForEach(d.time.indices, id: \.self) { i in
+                        let dateStr = d.time[i]
+                        HStack(spacing: 8) {
+                            Text(weekdayText(dateStr, timezone: f.timezone, index: i))
+                                .font(.subheadline)
+                                .frame(width: 40, alignment: .leading)
+                            WeatherIcon(code: d.weather_code[i], isDay: true, size: 26)
+                                .frame(width: 24)
+                            dailyPrecipText(d, i)
+                                .font(.caption2)
+                                .foregroundStyle(Color(hex: "#BFE0FF"))
+                                .frame(width: 44, alignment: .leading)
+                            Text("\(Int(d.temperature_2m_min[i].rounded()))°")
+                                .font(.subheadline)
+                                .foregroundStyle(.white.opacity(0.85))
+                                .frame(width: 32, alignment: .trailing)
+                            rangeBar(min: d.temperature_2m_min[i], max: d.temperature_2m_max[i],
+                                     weekMin: weekMin, weekMax: weekMax)
+                                .frame(height: 5)
+                            Text("\(Int(d.temperature_2m_max[i].rounded()))°")
+                                .font(.subheadline.weight(.semibold))
+                                .frame(width: 32, alignment: .trailing)
+                        }
                     }
                 }
             }

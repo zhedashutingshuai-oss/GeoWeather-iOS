@@ -68,6 +68,8 @@ struct WeatherSceneView: View {
     let code: Int
     let isDay: Bool
     var animated: Bool = true
+    /// 首页用：顶部压一层同色渐隐，让场景沉到标题文字后面、不糊字
+    var topDim: Bool = false
 
     @State private var drift: CGFloat = -16
 
@@ -104,6 +106,15 @@ struct WeatherSceneView: View {
                 }
 
                 precipLayer(size)
+
+                if topDim {
+                    LinearGradient(colors: [Color(hex: sky.top).opacity(0.94),
+                                            Color(hex: sky.top).opacity(0)],
+                                   startPoint: .top, endPoint: .bottom)
+                        .frame(height: size.height * 0.44)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                        .allowsHitTesting(false)
+                }
             }
             .frame(width: size.width, height: size.height)
         }
@@ -376,5 +387,22 @@ enum SolarTerm {
         if t.isToday { return "今日\(t.name)" }
         if t.daysToNext == 1 { return "\(t.name) · 明日\(t.next)" }
         return "\(t.name) · 距\(t.next) \(t.daysToNext) 天"
+    }
+}
+
+// MARK: - 农历（系统中文历）
+
+enum LunarDate {
+    static func displayText() -> String {
+        let cal = Calendar(identifier: .chinese)
+        let comps = cal.dateComponents([.month, .day, .isLeapMonth], from: Date())
+        guard let month = comps.month, let day = comps.day else { return "" }
+        let monthNames = ["正", "二", "三", "四", "五", "六", "七", "八", "九", "十", "冬", "腊"]
+        let dayNames = ["初一", "初二", "初三", "初四", "初五", "初六", "初七", "初八", "初九", "初十",
+                        "十一", "十二", "十三", "十四", "十五", "十六", "十七", "十八", "十九", "二十",
+                        "廿一", "廿二", "廿三", "廿四", "廿五", "廿六", "廿七", "廿八", "廿九", "三十"]
+        guard (1...12).contains(month), (1...30).contains(day) else { return "" }
+        let leap = (comps.isLeapMonth == true) ? "闰" : ""
+        return "农历\(leap)\(monthNames[month - 1])月\(dayNames[day - 1])"
     }
 }

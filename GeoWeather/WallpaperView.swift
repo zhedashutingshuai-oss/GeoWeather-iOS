@@ -88,7 +88,7 @@ struct WallpaperView: View {
                     .disabled(saveState == 1)
 
                     if saveState == 3 {
-                        Text("保存失败：请在系统设置里允许几何天气添加照片。")
+                        Text("保存失败：请在系统设置里允许司天添加照片。")
                             .font(.caption)
                             .foregroundStyle(.yellow)
                     }
@@ -149,35 +149,10 @@ struct WallpaperView: View {
         .task(id: city.id) { await load() }
     }
 
-    /// 壁纸画布：场景 + 文字（选中当前场景时带实时温度，其余显示场景名）
+    /// 壁纸画布：纯场景，不带任何文字（城市/温度/天气字样全去掉）
     private func canvas(size: CGSize, option: SceneOption) -> some View {
-        ZStack {
-            WeatherSceneView(code: option.code, isDay: option.isDay, animated: false)
-            VStack {
-                Text(city.name)
-                    .font(.system(size: size.width * 0.068, weight: .semibold))
-                    .padding(.top, size.height * 0.085)
-                Spacer()
-                VStack(spacing: size.height * 0.006) {
-                    if option.id == currentOptionID, let f = forecast {
-                        Text("\(Int(f.current.temperature_2m.rounded()))°")
-                            .font(.system(size: size.width * 0.27, weight: .thin))
-                        Text(WeatherCode.text(f.current.weather_code))
-                            .font(.system(size: size.width * 0.05, weight: .medium))
-                    } else {
-                        Text(option.name)
-                            .font(.system(size: size.width * 0.17, weight: .thin))
-                        Text(city.name)
-                            .font(.system(size: size.width * 0.045))
-                            .foregroundStyle(.white.opacity(0.85))
-                    }
-                }
-                .padding(.bottom, size.height * 0.065)
-            }
-            .foregroundStyle(.white)
+        WeatherSceneView(code: option.code, isDay: option.isDay, animated: false)
             .frame(width: size.width, height: size.height)
-        }
-        .frame(width: size.width, height: size.height)
     }
 
     private func load() async {
