@@ -36,7 +36,7 @@ struct ToolsView: View {
         Card(title: "外观") {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 0) {
-                    ForEach([("light", "浅色"), ("dark", "深色"), ("system", "跟随手机")], id: \.0) { opt in
+                    ForEach([("light", "浅色"), ("dark", "深色"), ("system", "按日出日落")], id: \.0) { opt in
                         Button {
                             withAnimation(.easeInOut(duration: 0.22)) { appearanceMode = opt.0 }
                         } label: {
@@ -58,7 +58,7 @@ struct ToolsView: View {
                 }
                 .padding(3)
                 .glassEffect(.regular, in: Capsule())
-                Text("深色会把天空场景、卡片和页面底色一起调暗；跟随手机按系统外观自动切换。")
+                Text("深色会把天空场景、卡片和页面底色一起调暗；「按日出日落」按当前城市的日出日落自动切换，日落自动进入夜景。")
                     .font(.caption)
                     .foregroundStyle(.white.opacity(0.75))
             }

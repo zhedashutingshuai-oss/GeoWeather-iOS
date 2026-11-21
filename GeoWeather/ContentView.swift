@@ -269,8 +269,31 @@ struct WeatherPageView: View {
     @State private var showRadar = false
     @State private var backup: BackupWeather?
 
+    @State private var nowTick = Date()
+
+    /// 昼夜判定：手动浅色/深色优先；自动模式按当前城市的日出日落走（日落自动切夜景，不再一直是大太阳）
     private var nightMode: Bool {
-        AppearanceHelper.isNight(mode: appearanceMode, scheme: colorScheme)
+        switch appearanceMode {
+        case "light": return false
+        case "dark": return true
+        default:
+            if let f = forecast {
+                if let night = sunNight(forecast: f, now: nowTick) { return night }
+                return f.current.is_day == 0
+            }
+            return AppearanceHelper.isNight(mode: appearanceMode, scheme: colorScheme)
+        }
+    }
+
+    /// 用预报里今天的日出/日落（城市当地时间）判断昼夜；每 2 分钟随 nowTick 重新评估，跨过日落自动翻转
+    private func sunNight(forecast f: ForecastResponse, now: Date) -> Bool? {
+        guard let sunriseStr = f.daily.sunrise.first, let sunsetStr = f.daily.sunset.first else { return nil }
+        let df = DateFormatter()
+        df.locale = Locale(identifier: "en_US_POSIX")
+        df.timeZone = TimeZone(identifier: f.timezone)
+        df.dateFormat = "yyyy-MM-dd'T'HH:mm"
+        guard let sunrise = df.date(from: sunriseStr), let sunset = df.date(from: sunsetStr) else { return nil }
+        return now < sunrise || now >= sunset
     }
 
     var body: some View {
@@ -341,6 +364,18 @@ struct WeatherPageView: View {
                 try? await Task.sleep(nanoseconds: 15_000_000_000)
                 if Task.isCancelled || forecast != nil { break }
                 await load()
+            }
+        }
+        .task {
+            while !Task.isCancelled {
+                nowTick = Date()
+                try? await Task.sleep(nanoseconds: 120_000_000_000)
+            }
+        }
+        .onChange(of: nightMode) { _, newValue in
+            if appearanceMode != "light" && appearanceMode != "dark" {
+                UserDefaults.standard.set(newValue, forKey: "appearance.autoNight")
+                UserDefaults.standard.set(true, forKey: "appearance.autoNight.set")
             }
         }
         .task(id: backup != nil) {
@@ -1259,6 +1294,10 @@ struct WeatherPageView: View {
             forecast = f
             backup = nil
             errorText = nil
+            if appearanceMode != "light" && appearanceMode != "dark" {
+                UserDefaults.standard.set(f.current.is_day == 0, forKey: "appearance.autoNight")
+                UserDefaults.standard.set(true, forKey: "appearance.autoNight.set")
+            }
             staleAt = nil
             ForecastCache.save(f, for: city)
             SharedSnapshotStore.save(SharedSnapshot.make(from: f, city: city))

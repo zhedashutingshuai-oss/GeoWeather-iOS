@@ -477,7 +477,12 @@ enum AppearanceHelper {
         switch mode {
         case "light": return false
         case "dark": return true
-        default: return scheme == .dark
+        default:
+            // 自动：优先用天气页按日出日落算出的昼夜（全 App 共用），还没有时跟手机外观
+            if UserDefaults.standard.bool(forKey: "appearance.autoNight.set") {
+                return UserDefaults.standard.bool(forKey: "appearance.autoNight")
+            }
+            return scheme == .dark
         }
     }
 
