@@ -57,8 +57,9 @@ struct HourlyWeather: Codable {
     let precipitation: [Double]
     let visibility: [Double]
     let dew_point_2m: [Double]
-    let wind_speed_10m: [Double]
-    let uv_index: [Double]
+    // 可选：旧版本缓存里没有这两个字段，设为可选保证缓存跨版本可解码
+    let wind_speed_10m: [Double]?
+    let uv_index: [Double]?
 }
 
 struct DailyWeather: Codable {
@@ -104,4 +105,10 @@ struct GeocodingResult: Decodable {
     let longitude: Double
     let country: String?
     let admin1: String?
+}
+
+extension Array {
+    subscript(safe index: Int) -> Element? {
+        indices.contains(index) ? self[index] : nil
+    }
 }

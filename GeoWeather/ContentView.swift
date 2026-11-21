@@ -320,6 +320,14 @@ struct WeatherPageView: View {
             topScrim
         }
         .task(id: city.id) { await load() }
+        .task(id: errorText) {
+            guard errorText != nil else { return }
+            while !Task.isCancelled && forecast == nil {
+                try? await Task.sleep(nanoseconds: 15_000_000_000)
+                if Task.isCancelled || forecast != nil { break }
+                await load()
+            }
+        }
     }
 
     private var gradientPair: (top: String, bottom: String) {
@@ -449,8 +457,8 @@ struct WeatherPageView: View {
                      code: f.hourly.weather_code[i],
                      temp: f.hourly.temperature_2m[i],
                      precip: f.hourly.precipitation_probability?[i] ?? nil,
-                     wind: f.hourly.wind_speed_10m[i],
-                     uv: f.hourly.uv_index[i])
+                     wind: f.hourly.wind_speed_10m?[safe: i] ?? 0,
+                     uv: f.hourly.uv_index?[safe: i] ?? 0)
         }
     }
 
@@ -1093,8 +1101,7 @@ struct WeatherPageView: View {
                 staleAt = cached.savedAt
                 errorText = nil
             } else if forecast == nil {
-                let desc = (error as NSError).localizedDescription
-                errorText = desc.isEmpty || desc.contains("data") ? "加载失败，请下拉重试" : "加载失败：\(desc)"
+                errorText = "网络连接失败，正在自动重试…（也可以下拉刷新）"
             }
         }
         air = try? await WeatherService.fetchAirQuality(for: city)

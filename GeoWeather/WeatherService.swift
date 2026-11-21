@@ -4,7 +4,7 @@ enum WeatherService {
     /// 带重试的请求：网络层错误（TLS 瞬断、超时等）自动重试 3 次，间隔递增；
     /// API 业务错误（domain == "OpenMeteo"，如参数非法）与任务取消不重试，直接抛出。
     private static func withRetry<T>(_ operation: () async throws -> T) async throws -> T {
-        let delays: [UInt64] = [0, 1_200_000_000, 2_500_000_000]
+        let delays: [UInt64] = [0, 1_500_000_000, 3_000_000_000, 6_000_000_000, 10_000_000_000]
         var lastError: Error = URLError(.unknown)
         for delay in delays {
             if delay > 0 { try? await Task.sleep(nanoseconds: delay) }
